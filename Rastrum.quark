@@ -1,0 +1,10 @@
+(
+\name: "Rastrum",
+\summary: "Music notation for SuperCollider: a format-neutral score model with LilyPond, MusicXML and JSON writers",
+\version: "v0.1.0",
+\schelp: "Rastrum",
+\url: "https://github.com/smoge/Rastrum",
+\dependencies: ["Rational"],
+\copyright: "Bernardo Barros. 2026",
+\license: "GPLv3"
+)
