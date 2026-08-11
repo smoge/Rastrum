@@ -1,3 +1,25 @@
+/*
+Runs the worked examples in source comments and checks what they answer.
+
+  sclang tools/doctest.scd [dir ...]
+
+An example is a comment line beginning `>>>`, the answer follows after `->`, or
+on the next comment line.
+
+    // >>> Set[1, 2, 3].size   -> 3
+
+    // >>> (1..8).collect { |i| i * i }
+    // [ 1, 4, 9, 16, 25, 36, 49, 64 ]
+
+`>>>` keeps the scan unambiguous, since prose holds arrows too. The separator is
+the last `->` with balanced brackets to its left, so an expression may hold its
+own; an answer holding one needs the two-line form.
+
+An expression continues onto the next comment line while it reads unfinished. A
+bracket still open, or a following line starting with `.`. Nothing else spans
+lines. A blank `//` closes an example, so prose after one needs one first, and
+an example left without an answer fails.
+*/
 
 (
 var targets = thisProcess.argv.copy;
