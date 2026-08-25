@@ -17,8 +17,8 @@ Rastrum {
         }
     }
 
-    // >>> Rastrum.version   -> 0.1.0
-    *version { ^"0.1.0" }
+    // >>> Rastrum.version   -> 0.1.1
+    *version { ^"0.1.1" }
 
     // Set by hand when discovery missed or found the wrong binary. nil means
     // no LilyPond.

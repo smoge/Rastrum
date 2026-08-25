@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- `MusicPitch.fromMidinote` now preserves the residual in `cents` when
+  `quantum` is finer than the quarter-tone accidental grid.
+
 ## 0.1.0
 
 - A score model carrying no writer syntax, so a new output format is a new
