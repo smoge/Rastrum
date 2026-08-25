@@ -407,38 +407,45 @@ MusicPitch {
     }
 
     // Answers a pitch for this midinote, spelled with sharps or with
-    // flats. Neither spelling is more correc. A midinote carries no
+    // flats. Neither spelling is more correct. A midinote carries no
     // key context. Sharps raise the letter below the pitch; flats
     // lower the letter above it. That keeps quarter-tone spellings
     // consistent too.
     //
-    // `quantum` is the snap grid. The remainder becomes `cents`.
+    // `quantum` is the snap grid. `cents` carries what the snap or the
+    // quarter-tone accidental grid cannot spell.
     //
-    // >>> MusicPitch.fromMidinote(61).accidental          -> sharp
-    // >>> MusicPitch.fromMidinote(61, \flats).accidental  -> flat
-    // >>> MusicPitch.fromMidinote(61, \flats).letter      -> d
-    // >>> MusicPitch.fromMidinote(60.5).accidental        -> quarterSharp
-    // >>> MusicPitch.fromMidinote(60.25).cents            -> -25.0
+    // >>> MusicPitch.fromMidinote(61).accidental            -> sharp
+    // >>> MusicPitch.fromMidinote(61, \flats).accidental    -> flat
+    // >>> MusicPitch.fromMidinote(61, \flats).letter        -> d
+    // >>> MusicPitch.fromMidinote(60.5).accidental          -> quarterSharp
+    // >>> MusicPitch.fromMidinote(60.25).cents              -> -25.0
+    // >>> MusicPitch.fromMidinote(60.25, 0.25).accidental   -> quarterSharp
+    // >>> MusicPitch.fromMidinote(60.25, 0.25).cents        -> -25.0
     *fromMidinote { |midinote, spelling = \sharps, quantum = 0.5|
-        var snapped, semis, frac, spec, alter;
+        var snapped, quarters, semis, steps, spec, alter;
 
         // A numeric second argument is the quantum: `fromMidinote(60.5, 1)`.
         if (spelling.isNumber) { quantum = spelling; spelling = \sharps };
 
         snapped = (midinote / quantum).round * quantum;
-        semis = snapped.floor.asInteger;
-        frac = snapped - semis;
+
+        // Accidentals spell quarter-tone steps; cents carries the rest.
+        quarters = (snapped * this.quarterStepsPerSemitone).round.asInteger;
+        semis = quarters div: this.quarterStepsPerSemitone;
+        steps = quarters % this.quarterStepsPerSemitone;
 
         // Flats spell downward from the note above.
-        if (spelling == \flats and: { frac > 0 }) {
+        if (spelling == \flats and: { steps > 0 }) {
             semis = semis + 1;
-            frac = frac - 1;
+            steps = steps - this.quarterStepsPerSemitone;
         };
 
         spec = this.spellingMap(spelling)[semis % 12];
         alter = MusicPitch.semitones(spec[1])
-            + MusicPitch.semitones((frac * 2).round.asInteger, 2);
-        ^this.new(spec[0], alter, (semis div: 12) - 1, (midinote - snapped) * 100)
+            + MusicPitch.semitones(steps, this.quarterStepsPerSemitone);
+        ^this.new(spec[0], alter, (semis div: 12) - 1,
+            (midinote - (quarters / this.quarterStepsPerSemitone)) * 100)
     }
 
     *spellingMap { |spelling|
