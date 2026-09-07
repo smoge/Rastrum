@@ -1,6 +1,6 @@
 (
 \name: "Rastrum",
-\summary: "Music notation for SuperCollider: a format-neutral score model with LilyPond, MusicXML and JSON writers",
+\summary: "Music notation for SuperCollider: a score model with LilyPond, MusicXML, GUIDO and ScoreJSON writers",
 \version: "v0.1.0",
 \schelp: "Rastrum",
 \url: "https://github.com/smoge/Rastrum",
