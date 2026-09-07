@@ -11,5 +11,4 @@
   `ScoreSelection`, `ScoreEdit`, `ScoreDiff`, `ScoreChange` and `ScoreHistory`.
 - Writers for notation backends, ScoreJSON v32 and SuperCollider
   Events/Patterns, with playback profiles.
-- Preparation, validation, inspection, executable docs, fixtures, engraving
-  checks and generated asset gates.
+- Preparation, validation, inspection, doctest tools
