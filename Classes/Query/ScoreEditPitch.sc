@@ -1,15 +1,14 @@
 // Note [A pitch edit is not a run edit]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// `transposeBy` and `assignPitches` take selection rules, not run
-// rules. A run edit rebuilds one container's children, so it needs one
-// timeline, one contiguous group and one owner. A pitch edit leaves
-// the shape in place. A selection scattered over two staves is still
-// one pitch edit.
+// `transposeBy` and `assignPitches` take selection rules, not run rules. A run
+// edit rebuilds one container's children, so it needs one timeline, one
+// contiguous group and one owner. A pitch edit leaves the shape in place. A
+// selection scattered over two staves is still one pitch edit.
 //
-// The tie rule stays. Moving half a logical tie leaves one written
-// sound on two pitches. `Validator` would only catch that later, inside
-// a leaf the caller didn't name. Asking here names the selection.
+// The tie rule stays. Moving half a logical tie leaves one written sound on two
+// pitches. `Validator` would only catch that later, inside a leaf the caller
+// didn't name. Asking here names the selection.
 //
 // The pitch arithmetic is `ScoreSelection`'s, unchanged. This extension adds
 // the edit boundary: check before, validate after.
@@ -212,6 +211,7 @@
     }
 
     // A copy of the tree with every selected leaf moved by an interval.
+    //
     // See Note [A pitch edit is not a run edit].
     //
     // The pitch movement is `ScoreSelection#transposeBy`, which carries each
@@ -301,7 +301,35 @@
         ^Validator.validate(selection.mapLogicalTies(function))
     }
 
+    // Checked score-level route over `ScoreSelection#spellPitches`.
+    //
+    // >>> { var bar = Measure("4/4", "c4 c#4 d4 c#4");
+    //     ScoreEdit.spellPitches(bar, ScoreSelection(bar), SpellingPolicy.byMotion)
+    //     .leaves.collect { |leaf| leaf.pitch.spelling } }.value
+    // [ c[4], c#[4], d[4], db[4] ]
+    //
+    // ^ ScoreElement
+    *spellPitches { |element, selection, policy|
+        var label = "spellPitches";
+
+        this.prCheckedSelectionOf(element, selection, label, "note to spell");
+        this.prCheckedSpellingPolicy(policy, label);
+        this.prCheckedWholeLogicalTies(element, selection.records, label);
+        // No sounding note: no history change.
+        if (selection.logicalTies.isEmpty) { ^element };
+        ^Validator.validate(selection.spellPitches(policy))
+    }
+
+    // Validate spelling before the silent no-op path.
+    *prCheckedSpellingPolicy { |policy, label|
+        var where = "ScoreEdit.%".format(label);
+
+        MusicPitch.checkedSpelling(policy, where);
+        ^SpellingPolicy.prCheckedPassageCapable(policy, where)
+    }
+
     // A copy of the tree with a pitch row dealt over the selection.
+    //
     // See Note [A pitch edit is not a run edit].
     //
     // The dealing is `ScoreSelection#assignPitches`: one pitch per *sounding

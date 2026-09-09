@@ -32,6 +32,8 @@ PitchMaterial {
         var value = Duration.asDuration(dur ?? { Duration.whole });
         var previous, index = 0;
 
+        this.prCheckedPolicy(policy);
+
         ^checked.collect { |row, rowIndex|
             var pitches = row.collect { |atom, column|
                 var pitch = this.prSpelled(atom, policy,
@@ -51,9 +53,8 @@ PitchMaterial {
     // Frequency in, atom out. No pitch, leaf, row or score is built,
     // so the answer goes straight into a row.
     //
-    // The grid is the quarter tone `MusicPitch` admits. It is not an
-    // argument: a coarser or finer one would imply grid support the
-    // pitch boundary does not have.
+    // Uses the written pitch grid. There is no local grid argument;
+    // missed distance stays in `cents`.
     //
     // >>> PitchMaterial.atomFromFreq(440)[\pitchNumber]   -> 69%/1
     // >>> PitchMaterial.atomFromFreq(440)[\cents]         -> 0.0
@@ -101,7 +102,7 @@ PitchMaterial {
         ^Chord(pitches, dur)
     }
 
-    // Monophonic passage facts for Function policies. Chord rows get none.
+    // Monophonic passage facts for policies. Chord rows get none.
     *prPassage { |rows, rowIndex, column, index, previous|
         var mono = rows[rowIndex].size == 1;
         var behind = if (mono) { previous };
@@ -196,6 +197,21 @@ PitchMaterial {
         try { cents = MusicPitch.checkedCents(value) } { |err| failure = err.what };
         if (failure.notNil) { this.prRefuseAt(rowIndex, column, failure) };
         ^cents
+    }
+
+    // `leafRows` is incremental: no whole-passage policies, and bad
+    // spellings are refused before rows are spelled.
+    //
+    // >>> try { PitchMaterial.leafRows([[60]], SpellingPolicy.prWholePassage) } { |e| e.what.contains("whole passage") }
+    // true
+    // >>> try { PitchMaterial.leafRows([[]], \tonal) } { |e| e.what.contains("not a spelling") }
+    // true
+    *prCheckedPolicy { |policy|
+        var label = "PitchMaterial.leafRows";
+
+        MusicPitch.checkedSpelling(policy, label);
+        ^SpellingPolicy.prCheckedIncremental(policy, label,
+            "leafRows spells one row at a time.")
     }
 
     *prSpelled { |atom, policy, passage|

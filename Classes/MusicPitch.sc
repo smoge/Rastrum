@@ -602,8 +602,8 @@ MusicPitch {
     //
     // ^ Self
     *fromNumber { |base, offset = 0, spelling, cents = 0|
-        // A Symbol or Function in the offset slot is spelling.
-        if (offset.isKindOf(Symbol) or: { offset.isKindOf(Function) }) {
+        // A spelling in the offset slot stays spelling.
+        if (offset.isKindOf(Symbol) or: { this.prIsPolicy(offset) }) {
             if (spelling.notNil) {
                 Error(
                     "MusicPitch: % in the offset slot sets spelling. Pass a fractional "
@@ -633,7 +633,12 @@ MusicPitch {
     //
     // ^ Self
     *prFromNumberInPassage { |base, spelling, cents = 0, passage|
-        if (spelling.isKindOf(Function).not) {
+        // `\written` needs `currentPitch`.
+        if (spelling == \written) {
+            ^this.prFromGridSteps(this.prCheckedGridSteps(base, 0), spelling,
+                cents, passage)
+        };
+        if (this.prIsPolicy(spelling).not) {
             ^this.fromNumber(base, 0, spelling, cents)
         };
         ^this.prPolicySpelling(
@@ -751,10 +756,13 @@ MusicPitch {
     *prFromGridSteps { |quarters, spelling, cents, passage|
         var semis, steps, spec, alter;
 
-        if (spelling.isKindOf(Function)) {
+        if (this.prIsPolicy(spelling)) {
             ^this.prPolicySpelling(quarters, spelling, cents, passage)
         };
         if (spelling == \minimal) { ^this.prMinimalSpelling(quarters, cents) };
+        if (spelling == \written) {
+            ^this.prWrittenSpelling(quarters, cents, passage)
+        };
 
         semis = quarters div: this.quarterStepsPerSemitone;
         steps = quarters % this.quarterStepsPerSemitone;
@@ -769,6 +777,19 @@ MusicPitch {
         alter = MusicPitch.semitones(spec[1])
             + MusicPitch.semitones(steps, this.quarterStepsPerSemitone);
         ^this.new(spec[0], alter, (semis div: 12) - 1, cents)
+    }
+
+    // Keep `currentPitch`. Fall back to `\minimal` where there is none.
+    //
+    // >>> MusicPitch("dbb[4]").spelled(\written).spelling   -> dbb[4]
+    // >>> MusicPitch.fromNumber(70, \written).spelling      -> a#[4]
+    //
+    // ^ Self
+    *prWrittenSpelling { |quarters, cents, passage|
+        var written = (passage ?? { () })[\currentPitch];
+
+        if (written.notNil) { ^written };
+        ^this.prMinimalSpelling(quarters, cents)
     }
 
     // ^ Self
@@ -793,40 +814,100 @@ MusicPitch {
     // Scalar context by default. Passage callers add neighbor facts.
     // ^ Self
     *prPolicySpelling { |quarters, policy, cents, passage|
-        var pitches = this.prSpellingsOf(quarters, cents);
+        var context = this.prContextFor(quarters, cents, passage);
         var number = Duration(quarters, this.quarterStepsPerSemitone);
+
+        ^this.prCheckedChoice(policy.value(context), context, number, policy)
+    }
+
+    // Policy context, built without choosing a spelling.
+    //
+    // ^ Event
+    *prContextFor { |quarters, cents, passage|
+        var pitches = this.prSpellingsOf(quarters, cents);
         var context = (passage ?? { () }).copy;
 
         context[\pitchNumber] = Rational(quarters, this.quarterStepsPerSemitone);
         context[\cents] = this.checkedCents(cents);
         context[\candidates] = pitches.collect { |each| this.prCandidateOf(each) };
         context[\minimal] = this.prLeastAltered(pitches, quarters, cents);
-        ^this.prCheckedChoice(policy.value(context), context, number)
+        ^context
+    }
+
+    // Policy context for an already spelled pitch.
+    //
+    // ^ Event
+    *prContextForPitch { |pitch, passage|
+        ^this.prContextFor(this.prCheckedGridSteps(pitch.height, 0),
+            pitch.cents, passage)
     }
 
     // Derived view over one candidate pitch.
     //
     // ^ Event
     *prCandidateOf { |pitch|
-        ^(noteName: noteNames[pitch.step], alter: pitch.alter,
-            octave: pitch.octave, pitch: pitch)
+        ^(noteName: noteNames[pitch.step], accidental: pitch.accidental,
+            alter: pitch.alter, octave: pitch.octave, pitch: pitch)
     }
 
-    // A policy chooses a spelling. It may not move the pitch number or cents.
+    // Function or SpellingPolicy. Not every object answering `value`.
+    //
+    // >>> MusicPitch.prIsPolicy(SpellingPolicy.minimal)   -> true
+    // >>> MusicPitch.prIsPolicy(\minimal)                 -> false
+    //
+    // ^ Boolean
+    *prIsPolicy { |value|
+        ^value.isKindOf(Function) or: { value.isKindOf(SpellingPolicy) }
+    }
+
+    // Admitted spelling values. Checked without calling a policy.
+    // Silent doors still reject bad spellings.
+    //
+    // >>> MusicPitch.checkedSpelling(\flats, "spellPitches")   -> flats
+    // >>> try { MusicPitch.checkedSpelling(\tonal, "x") } { |e| e.what.contains("not a spelling") }
+    // true
+    //
+    // ^ Symbol | Function | SpellingPolicy
+    *checkedSpelling { |spelling, label|
+        if (this.prIsPolicy(spelling)) { ^spelling };
+        if (this.spellingNames.includes(spelling)) { ^spelling };
+        Error(
+            "%: % is not a spelling. Use \\sharps, \\flats, \\minimal, \\written, a "
+            "Function or a SpellingPolicy.".format(label, spelling.asCompileString)
+        ).throw
+    }
+
+    // Built-in spellings. `\written` reads `currentPitch`.
+    //
+    // >>> MusicPitch.spellingNames   -> [ sharps, flats, minimal, written ]
+    //
+    // ^ [Symbol]
+    *spellingNames { ^[\sharps, \flats, \minimal, \written] }
+
+    // Built-ins a pass-like rule can use when spelling neighbors.
+    //
+    // >>> MusicPitch.contextFreeSpellingNames   -> [ sharps, flats, minimal ]
+    //
+    // ^ [Symbol]
+    *contextFreeSpellingNames { ^[\sharps, \flats, \minimal] }
+
+    // A policy chooses spelling only. Refusals name what answered.
     //
     // ^ Self
-    *prCheckedChoice { |answer, context, number|
+    *prCheckedChoice { |answer, context, number, policy|
         var pitch = if (answer.isKindOf(Event)) { answer[\pitch] } { answer };
+        var who = this.prPolicyLabel(policy);
         if (pitch.isKindOf(MusicPitch).not) {
             Error(
-                "MusicPitch: spelling policy must answer a candidate Event or "
-                "MusicPitch, got %.".format(answer.asCompileString)
+                "MusicPitch: % must answer a candidate Event or MusicPitch, got %."
+                .format(who, answer.asCompileString)
             ).throw
         };
         if (pitch.height != number) {
             Error(
-                "MusicPitch: spelling policy answered % at %, not pitch number %."
+                "MusicPitch: % answered % at %, not pitch number %."
                 .format(
+                    who,
                     pitch.spelling,
                     this.prNumberText(pitch.height),
                     this.prNumberText(number)
@@ -835,17 +916,31 @@ MusicPitch {
         };
         if (pitch.cents != context[\cents]) {
             Error(
-                "MusicPitch: spelling policy answered % cents, not %."
-                .format(pitch.cents, context[\cents])
+                "MusicPitch: % answered % cents, not %."
+                .format(who, pitch.cents, context[\cents])
             ).throw
         };
         if (context[\candidates].any { |each| each[\pitch] == pitch }.not) {
             Error(
-                "MusicPitch: % is not a candidate spelling of pitch number %."
-                .format(pitch.spelling, this.prNumberText(number))
+                "MusicPitch: % answered %, which is not a candidate spelling of "
+                "pitch number %."
+                .format(who, pitch.spelling, this.prNumberText(number))
             ).throw
         };
         ^pitch
+    }
+
+    // Diagnostic label for a policy answer.
+    //
+    // >>> MusicPitch.prPolicyLabel(SpellingPolicy.flats)   -> spelling policy flats
+    // >>> MusicPitch.prPolicyLabel({ |ctx| ctx })          -> spelling Function
+    //
+    // ^ String
+    *prPolicyLabel { |policy|
+        if (policy.isKindOf(SpellingPolicy)) {
+            ^"spelling policy %".format(policy.name)
+        };
+        ^"spelling Function"
     }
 
     // ^ [(Integer, Integer)]
@@ -857,9 +952,14 @@ MusicPitch {
                 "MusicPitch: \\minimal ranks MusicPitch.spellings; it has no map."
             ).throw
         };
+        if (spelling == \written) {
+            Error(
+                "MusicPitch: \\written keeps the pitch being respelled; it has no map."
+            ).throw
+        };
         Error(
-            "MusicPitch: \"%\" is not a spelling. Use \\sharps, \\flats, \\minimal, or "
-            "a Function.".format(spelling)
+            "MusicPitch: \"%\" is not a spelling. Use \\sharps, \\flats, \\minimal, "
+            "\\written, a Function or a SpellingPolicy.".format(spelling)
         ).throw
     }
 
@@ -899,9 +999,14 @@ MusicPitch {
     // >>> MusicPitch("c#[4]", cents: 7).spelled(\flats).cents   -> 7.0
     // >>> MusicPitch("c#+[4]").spelled(\minimal).spelling   -> d-[4]
     //
+    // `currentPitch` is only available through the passage path.
+    //
+    // >>> MusicPitch("c#[4]").spelled({ |ctx| ctx[\currentPitch] }).spelling   -> c#[4]
+    //
     // ^ MusicPitch
     spelled { |spelling = \sharps|
-        ^MusicPitch.fromNumber(this.height, 0, spelling, cents)
+        ^MusicPitch.prFromNumberInPassage(
+            this.height, spelling, cents, (currentPitch: this))
     }
 
     // Playback projection. Folds `cents` into a Float. Ordering uses `height`.
