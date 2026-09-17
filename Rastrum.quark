@@ -1,7 +1,7 @@
 (
 \name: "Rastrum",
 \summary: "Music notation for SuperCollider: a score model with LilyPond, MusicXML, GUIDO and ScoreJSON writers",
-\version: "v0.1.0",
+\version: "v0.1.1",
 \schelp: "Rastrum",
 \url: "https://github.com/smoge/Rastrum",
 \dependencies: ["Rational"],

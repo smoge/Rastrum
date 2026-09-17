@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- `SpellingPolicy`: pitch-spelling choices, named accidental
+  preferences, motion-aware spelling, `\written` preservation
+- `ScoreEdit.spellPitches` and `ScoreSelection#spellPitches`: apply spelling
+
 ## 0.1.0
 
 - Core score tree: scores, staves, measures, voices, notes, rests, chords,
