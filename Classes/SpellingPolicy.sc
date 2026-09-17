@@ -9,7 +9,8 @@
 
 SpellingPolicy {
     // name: Symbol, chooser: Function, requiresWholePassage: Boolean
-    // builtInSpelling: Symbol, the Symbol this policy is equal to, or nil
+    //
+    // builtInSpelling: Symbol | Nil, resolver: Function | Nil
     var <name, chooser, <requiresWholePassage, <builtInSpelling, resolver;
 
     // Built-in spellings as policies for nested slots.
@@ -246,7 +247,7 @@ SpellingPolicy {
         ^MusicPitch.fromNumber(number, 0, spelling, cents ? 0)
     }
 
-    // ^ Event
+    // ^ Event | Nil
     *prFirstNamed { |wanted, ctx|
         wanted.do { |row|
             var found = ctx[\candidates].detect { |each|

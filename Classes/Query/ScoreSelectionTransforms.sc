@@ -141,7 +141,7 @@
 
     // Run indices grouped by onset; multiple runs mean a chord.
     //
-    // ^ [[Duration, [Integer]]]
+    // ^ [(Duration, [Integer])]
     *prTimelinePositions { |runs, indices|
         var out = [];
 
@@ -212,7 +212,7 @@
 
     // Incoming motion, or outgoing at the start. Height before cents.
     //
-    // ^ Symbol
+    // ^ Symbol | Nil
     *prRunMotion { |behind, here, ahead|
         if (behind.notNil) {
             ^this.prPitchMotion(behind[\pitch], here[\pitch])
