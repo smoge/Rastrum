@@ -13,8 +13,9 @@
 
 PitchMaterial {
 
-    // One leaf per row: rest, note or chord. Function policies also
-    // read the passage position.
+    // One leaf per row: rest, note or chord.
+    //
+    // Policies also read the passage position.
     //
     // `dur` defaults inside. SuperCollider argument defaults must be literal.
     //

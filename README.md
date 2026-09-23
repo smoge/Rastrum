@@ -13,11 +13,11 @@ leaves that can. `Rastrum.render`, `Rastrum.preview`, `Rastrum.writeMusicXML`
 and `Rastrum.writeGuido` derive ordinary beam groups by default.
 
 `Rastrum.writeJSON` doesn't. A derived beam is engraving policy, not a score
-fact, and policy stays off the wire.
+fact. ScoreJSON leaves that policy out.
 
-ScoreJSON is a proposed interchange format for scores: versioned, open, and not
-tied to one program's model. Two programs can trade a score without either one
-moving into the other's house.
+ScoreJSON is an exchange format for scores: versioned, open, and not tied to one
+program's model. Two programs can trade a score without either one moving into
+the other's house.
 
 **Status: experimental.** The API may still change.
 
@@ -139,7 +139,7 @@ A bar is one string. Spans it can't say stay as objects around it. A written
 `cresc[...]` group ends on leaves and holds whatever stands between them, so the
 hairpin can reach across the triplet without naming each leaf. A span past one
 bar still uses a `Spanner` helper on the leaves it joins. A beam against a
-bracket is authorial too. The eighth is beamed into the triplet here by hand,
+tuplet is a written beam too. The eighth is beamed into the triplet here by hand,
 not by `AutoBeam`.
 
 The second bar states rhythm as proportions and pitches as a list. That lets a
@@ -153,7 +153,7 @@ player reads a part, so the span attaches to the run before the rest, not to a
 counted position. A group helper takes that selection directly. Each helper
 answers its run, so the beam and slur over one phrase can be one line.
 
-Façade methods prepare and validate by default. `render`, `preview`,
+The public write paths prepare and validate by default. `render`, `preview`,
 `writeMusicXML` and `writeGuido` also derive ordinary beams. Raw writers return
 strings and leave those passes to the caller.
 
@@ -257,18 +257,19 @@ Spanners, voices and bar-level objects stay ordinary objects around compact leav
 
 The bar parser reads a run of tokens: pitch plus note value, `c*5/8` for an
 exact rational duration, `r` for a rest, `'` and `,` for register, `<c e g>4`
-for a chord, trailing `~` for a tie, `3:2[c4 d4 e4]` for a bracket,
+for a chord, trailing `~` for a tie, `3:2[c4 d4 e4]` for a tuplet bracket,
 `crescendo[c4 d4]` or `cresc[c4 d4]` for a hairpin, and `gliss[c4 e4]` for a
-glissando chain. A hairpin run may hold a bracket between endpoints. Above
-leaves and brackets, everything stays an object: voices, slurs, beams,
-directions and barlines.
+glissando chain. A hairpin run may hold a tuplet between endpoints. Above
+leaves and tuplets, everything stays an object: voices, slurs, beams, directions
+and barlines.
 
 A written line puts the meter first, as in `"4/4 c4 d4 e2"`, and several bars
 are separated by `|` with the meter stated only where it changes. A semicolon
 after the meter is optional. Use it where it improves readability.
 
 That form suits a bar you already know. When rhythm is proportional, generated
-or transformed, write shares and let the meter derive note values and any bracket.
+or transformed, write shares and let the meter derive note values and any tuplet
+bracket.
 
 ## Design
 
@@ -277,10 +278,9 @@ new document format is a new `ScoreWriter` subclass and nothing else. Durations,
 tuplets, beams, directions and pitches stay score facts. Each writer spells them
 for its own format.
 
-Keeping several backends live keeps the model honest. A concept only one format
-can express is either modeled deliberately or refused by name. GUIDO is the
-narrowest backend, and the handful of things it can't draw are refused rather
-than approximated.
+Each writer reads the same score facts. A concept only one format can express is
+modeled deliberately or refused by name. GUIDO is the narrowest backend, and the
+handful of things it can't draw are refused rather than approximated.
 
 ### Proportional Rhythm
 
@@ -324,8 +324,8 @@ the subject is the rhythm. A meter can be written the way it prints, as in
 
 The note values and any tuplet bracket follow from the shares and meter. That
 derivation is meter-aware on purpose. Three equal shares of a 3/4 bar are plain
-quarters. A blind power-of-two rule would bracket them anyway. Three equal
-shares of a 4/4 bar need a bracket:
+quarters. A blind power-of-two rule would make them tuplets anyway. Three equal
+shares of a 4/4 bar need a tuplet bracket:
 
 ```supercollider
 RhythmTree.chooseDivisor(Duration(3, 4), [1, 1, 1]);   // 3, plain quarters
@@ -367,8 +367,8 @@ MusicScore.staves([
 
 ![Nested tuplets from one substituted cell](assets/rtm-manipulation.png)
 
-Nothing here is a special case. The brackets are what the shares came to against
-each meter. No depth was requested.
+Nothing here is a special case. The tuplet brackets are what the shares came to
+against each meter. No depth was requested.
 
 ### Pitches and Intervals
 
@@ -405,6 +405,17 @@ Meter(3, 4).indispensability(Duration(1, 8));   // [ 5, 0, 3, 1, 4, 2 ]
 Meter(6, 8).indispensability(Duration(1, 8));   // [ 5, 0, 2, 4, 1, 3 ]
 ```
 
+`pulses` exposes the grid, `indispensabilityAt` asks for one offset, and
+`RhythmCell#articulatesIn` checks whether a rhythm attacks the written group
+starts:
+
+```supercollider
+Meter(3, 4).pulses;
+// [ Duration(0/1), Duration(1/4), Duration(1/2) ]
+Meter(3, 4).indispensabilityAt(Duration(1, 2));  // 1
+RhythmCell([3, 2, 2]).articulatesIn("7/8[3+2+2]");  // true
+```
+
 
 ### Preparation and Validation
 
@@ -426,15 +437,15 @@ ScorePrepare.run(Measure("4/4", "c*5/8 d*3/8"));   // one leaf became two tied
 Validator.validate(Measure("4/4", "c4 d4"));   // refused: the bar is half full
 ```
 
-Facade methods run both passes before any writer. Raw writers don't, so hand
-them `ScorePrepare.run(...)` yourself or they refuse the unprepared tree instead
-of guessing.
+The public write paths run both passes before any writer. Raw writers don't, so
+hand them `ScorePrepare.run(...)` yourself or they refuse the unprepared tree
+instead of guessing.
 
 ### Beams, Graces and Glissandi
 
-A beam is authored as a spanner, `Spanner.beam("c8 d8 e8 f8")`, or derived from
-the meter by `AutoBeam`. Deriving it once in the model lets every backend draw
-the same decision instead of inferring its own. LilyPond's own inference is
+A beam can be written by hand with `Spanner.beam("c8 d8 e8 f8")`, or derived
+from the meter by `AutoBeam`. Deriving it once in the model lets every backend
+draw the same decision instead of inferring its own. LilyPond's own inference is
 turned off for that reason.
 
 ```supercollider
@@ -484,8 +495,8 @@ Rastrum.preview(~score, "study-01", layout: LilyProfile(\complexRhythm,
     (systemSpacing: 22, markupSystemPadding: 3)));
 ```
 
-`\complexRhythm` adds proportional spacing, full brackets and complete ratios.
-Use `\openComplexRhythm` for deeper nesting.
+`\complexRhythm` adds proportional spacing, full tuplet brackets and complete
+ratios. Use `\openComplexRhythm` for deeper nesting.
 
 ## Reading and Editing a Score
 
@@ -531,7 +542,8 @@ spanner.
 `splitLeafByProportions` and `splitLeafByDurations` divide one leaf into
 fragments. Notes and chords tie across them. Rests stay rests. `joinLeaves` is
 their inverse. `fillMeasures` fills whole bars from one cell, with the row
-reading across the bars of a lane.
+reading across the bars of a lane, and `fillTalea` carries one `Talea` across
+those barlines, where a count that straddles one is a tie.
 
 ```supercollider
 ~loop = MusicScore.oneStaff([
@@ -668,11 +680,11 @@ structural playback, so you can start there and add one layer at a time.
 
 ## Interchange
 
-ScoreJSON is the proposed wire format. `ScoreJSONWriter` and `ScoreJSONReader`
-are Rastrum's ends of it: a tagged tree with a `"type"` discriminator, exact
-rationals as `[numerator, denominator]` pairs, and no floats except `cents`.
-Nothing in the shape is particular to Rastrum. Any project that can write the
-tree can hand a score to any project that can read one.
+ScoreJSON is a shared exchange format for scores. Rastrum's reader and writer
+use a tagged tree with a `"type"` discriminator, exact rationals as
+`[numerator, denominator]` pairs, and no floats except `cents`. Nothing in the
+shape is particular to Rastrum. Any project that can write the tree can hand a
+score to any project that can read one.
 
 Current ScoreJSON documents say `"format":"score-json"` and `"version":32`, and
 the version is bumped on any change to the schema.

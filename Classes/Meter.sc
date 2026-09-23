@@ -171,14 +171,29 @@ Meter {
         ^this.levelOf(offset) <= this.levelOf(point)
     }
 
+    // Pulse offsets from the bar start. `pulse` defaults to the unit and may
+    // divide it.
+    //
+    // >>> Meter(3, 4).pulses
+    // [ Duration(0/1), Duration(1/4), Duration(1/2) ]
+    // >>> Meter(3, 4).pulses(Duration(1, 8)).size            -> 6
+    // >>> Meter(3, 4).pulses(Duration(1, 8)).last            -> Duration(5/8)
+    // >>> Meter("5/8[2+3]").pulses.size                      -> 5
+    // >>> Meter("5/8[2+3]").pulses == Meter(5, 8).pulses     -> true
+    pulses { |pulse|
+        var each = pulse ?? { this.unitDuration };
+        ^(0 .. (this.prPerUnit(pulse) * count) - 1)
+            .collect { |i| each * Duration(i, 1) }
+    }
+
     // The weakest line the meter counts: where one beat parts from
     // the next.
     //
     // >>> Meter(4, 4).unitLevel        -> 2
     // >>> Meter("5/8[2+3]").unitLevel  -> 2
     unitLevel {
-        ^(0 .. count - 1).inject(0, { |weakest, i|
-            max(weakest, this.levelOf(this.unitDuration * Duration(i, 1))) })
+        ^this.pulses.inject(0, { |weakest, at|
+            max(weakest, this.levelOf(at)) })
     }
 
     // Note [A rest carries the beat, a note carries the line]
@@ -216,6 +231,22 @@ Meter {
         ^(1..total).collect { |n| Meter.prIndispensability(n, strata) }
     }
 
+    // Barlow rank at `offset` on the grid named by `pulse`.
+    // Answers `nil` off grid. Refuses what `indispensability` refuses.
+    //
+    // >>> Meter("3/4").indispensabilityAt(Duration(1, 8), Duration(1, 8))   -> 0
+    // >>> Meter("3/4").indispensabilityAt(Duration(1, 8))                   -> nil
+    // >>> Meter("3/4").indispensabilityAt(Duration(0, 1))                   -> 2
+    // >>> Meter("3/4").indispensabilityAt(Duration(1, 2))                   -> 1
+    // >>> Meter("3/4").indispensabilityAt(Duration(3, 4))                   -> nil
+    // >>> Meter(6, 8).indispensabilityAt(Duration(3, 8))                    -> 4
+    indispensabilityAt { |offset, pulse|
+        var ranks = this.indispensability(pulse);
+        var at = offset / (pulse ?? { this.unitDuration });
+        if (at.denominator != 1) { ^nil };
+        ^ranks[at.numerator]
+    }
+
     // Ordered prime factors for Barlow's formula: bar count, then
     // each unit's subdivision into `pulse`.
     //
@@ -227,20 +258,25 @@ Meter {
     // >>> Meter(6, 4).stratification(Duration(1, 8))    -> [ 2, 3, 2 ]
     // >>> Meter(5, 8).stratification                    -> [ 5 ]
     stratification { |pulse|
-        var each = pulse ?? { this.unitDuration };
-        var perUnit;
         if (this.isGrouped) {
             Error(
                 "Meter: indispensability is not defined for grouped meter %.".format(this)
             ).throw
         };
-        perUnit = this.unitDuration / each;
+        ^Meter.prPrimeFactors(count)
+            ++ Meter.prPrimeFactors(this.prPerUnit(pulse))
+    }
+
+    // Unit subdivision count for a valid pulse.
+    prPerUnit { |pulse|
+        var each = pulse ?? { this.unitDuration };
+        var perUnit = this.unitDuration / each;
         if (perUnit.denominator != 1 or: { perUnit.numerator < 1 }) {
             Error(
-                "Meter: pulse % must be the unit of % or a division of it.".format(each, this)
+                "Meter: pulse % must divide unit %.".format(each, this.unitDuration)
             ).throw
         };
-        ^Meter.prPrimeFactors(count) ++ Meter.prPrimeFactors(perUnit.numerator)
+        ^perUnit.numerator
     }
 
     // The printed pair and grouping define equality and hashing.

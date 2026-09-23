@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.2
+
+- `Meter#pulses`, `Meter#indispensabilityAt` and `RhythmCell#articulatesIn`:
+  derived metric queries for pulse offsets, Barlow ranks at offsets, and group
+  articulation.
+- ScoreJSON refuses recipe/provenance keys at the score root, staff, measure
+  and note levels.
+- `ScoreEdit.fillTalea`: fill consecutive measure voices from one `Talea`,
+  tying counts that cross barlines.
+
 ## 0.1.1
 
 - `SpellingPolicy`: pitch-spelling choices, named accidental

@@ -558,8 +558,8 @@ MusicPitch {
     // lower the letter above it. That keeps quarter-tone spellings
     // consistent too.
     //
-    // `quantum` is the snap grid. `cents` carries what the snap or
-    // the quarter-tone accidental grid cannot spell.
+    // `quantum` snaps the incoming Float before spelling. It doesn't choose the
+    // accidental vocabulary; residual distance stays in `cents`.
     //
     // >>> MusicPitch.fromMidinote(61).accidental            -> sharp
     // >>> MusicPitch.fromMidinote(61, \flats).accidental    -> flat
@@ -779,7 +779,7 @@ MusicPitch {
         ^this.new(spec[0], alter, (semis div: 12) - 1, cents)
     }
 
-    // Keep `currentPitch`. Fall back to `\minimal` where there is none.
+    // Keep `currentPitch`; fall back to `\minimal` where there is none.
     //
     // >>> MusicPitch("dbb[4]").spelled(\written).spelling   -> dbb[4]
     // >>> MusicPitch.fromNumber(70, \written).spelling      -> a#[4]

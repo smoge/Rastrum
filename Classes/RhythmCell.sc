@@ -421,6 +421,39 @@ RhythmCell {
         ^this.replaceCellAt(path, func.value(this.cellAt(path)))
     }
 
+    // Rewrites several subcells in one pass
+    //
+    // The function receives the subcell and path. Duplicate paths rewrite once.
+    // The result is not reduced.
+    //
+    // >>> RhythmCell([1, [2, [3, 4]], [5, [6, 7]]]).rewriteCellsAt([[1], [2]], { |c| c.retrograde })
+    // RhythmCell([ 1, [ 2, [ 4, 3 ] ], [ 5, [ 7, 6 ] ] ])
+    // >>> RhythmCell([1, [2, [3, 4]]]).rewriteCellsAt([[1], [1]], { |c| c.scaledBy(2) })
+    // RhythmCell([ 1, [ 2, [ 6, 8 ] ] ])
+    rewriteCellsAt { |paths, func|
+        // Existence first, so missing paths report as missing.
+        var wanted = RhythmCell.prPathList(paths)
+            .collect { |path| this.prCheckedPath(path) };
+        var result = this;
+
+        wanted = RhythmCell.prFirstOccurrences(wanted);
+        RhythmCell.prCheckNoOverlap(wanted, "Rewrite");
+        wanted.do { |path|
+            result = result.rewriteCellAt(path,
+                { |subcell| func.value(subcell, path) })
+        };
+        ^result
+    }
+
+    // Value-based unique paths, preserving first use
+    *prFirstOccurrences { |paths|
+        var seen = List.new;
+        paths.do { |path|
+            if (seen.any { |each| each == path }.not) { seen.add(path) }
+        };
+        ^seen.asArray
+    }
+
     // Shared subdivided-share check.
     prSubdividedShareAt { |path|
         var share = this.shareAt(path);
@@ -469,24 +502,22 @@ RhythmCell {
             .collect { |path| this.prCheckedPath(path) };
         var result = this;
 
-        RhythmCell.prCheckNoOverlap(wanted);
+        RhythmCell.prCheckNoOverlap(wanted, "Silence");
         wanted.do { |path| result = result.prMutedAtOnePath(path) };
         ^result
     }
 
-    // A path may not sit inside another path. Silencing both would
-    // make the result order-dependent.
-    //
-    // Without overlap, replacement order cannot matter.
-    *prCheckNoOverlap { |paths|
+    // Ancestor/descendant paths make the result order-dependent.
+    // `verb` supplies the caller-facing refusal.
+    *prCheckNoOverlap { |paths, verb = "Name"|
         paths.do { |outer|
             paths.do { |inner|
                 if (inner.size > outer.size and: {
                     inner.copyRange(0, outer.size - 1) == outer
                 }) {
                     Error(
-                        "RhythmCell: path % is inside path %. Silence one or the other."
-                        .format(inner, outer)
+                        "RhythmCell: path % is inside path %. % one or the other."
+                        .format(inner, outer, verb)
                     ).throw
                 }
             }
@@ -696,6 +727,23 @@ RhythmCell {
         ^1 + deepest
     }
 
+    // Widest sibling list, top level included.
+    //
+    // >>> RhythmCell([1, 1, 1]).maxArity   -> 3
+    // >>> RhythmCell([1, [2, [1, 1, 1]]]).maxArity   -> 3
+    // >>> RhythmCell([1, 1, 1, 1, [2, [1, 1]]]).maxArity   -> 5
+    maxArity { ^RhythmCell.prMaxArity(proportions) }
+
+    *prMaxArity { |list|
+        var widest = list.size;
+        list.do { |entry|
+            if (entry.isNumber.not) {
+                widest = max(widest, this.prMaxArity(entry[1]))
+            }
+        };
+        ^widest
+    }
+
     // This cell with common factors removed independently at each
     // sibling list, the same way lowering reads it.
     //
@@ -735,16 +783,61 @@ RhythmCell {
             .collect { |row| row[\offset] }
     }
 
-    // The question `reduced` doesn't answer, asked directly. `==` is
-    // structural and `reduced` only removes common factors, so both
-    // call two spellings of one rhythm two cells. These read the
-    // segments instead, which is what the lowering will hear.
+    // Whether every AutoBeam group starts with an attack. Takes a Meter or
+    // printed time signature. A Duration has no grouping.
     //
-    // `other` is a cell or a bare proportion list, on the pattern
-    // `RhythmTree` sets. `span` is what `segmentsIn` takes, a whole
-    // note when omitted. It scales both sides alike, so it is there
-    // to read alongside the rest of the analysis rather than to
-    // decide anything.
+    // >>> RhythmCell([1, 1, 1, 1]).articulatesIn("4/4")       -> true
+    // >>> RhythmCell([2, 1, 1]).articulatesIn("4/4")          -> false
+    // >>> RhythmCell([1, -1, 1, 1]).articulatesIn("4/4")      -> false
+    // >>> RhythmCell([1, 1]).articulatesIn("4/4")             -> false
+    // >>> RhythmCell([2, 3]).articulatesIn("5/8[2+3]")        -> true
+    // >>> RhythmCell([5]).articulatesIn("5/8[2+3]")           -> false
+    // >>> RhythmCell([3, 2, 2]).articulatesIn("7/8[3+2+2]")   -> true
+    articulatesIn { |meter|
+        var bar = Meter.asMeter(meter);
+        var attacks;
+        if (bar.isNil) {
+            Error(
+                "RhythmCell: articulatesIn needs a meter, such as \"4/4\" or "
+                "\"5/8[2+3]\". A duration doesn't say how the bar divides."
+            ).throw
+        };
+        attacks = this.attackOffsetsIn(bar);
+        ^AutoBeam.groupOffsets(bar).every { |edge|
+            attacks.any { |offset| offset == edge } }
+    }
+
+    // Attacks per whole note. Exact, but not a Duration.
+    //
+    // >>> RhythmCell([1, 1, 1, 1]).densityIn("4/4") == Rational(4, 1)   -> true
+    // >>> RhythmCell([1, 1, 1]).densityIn("3/4") == Rational(4, 1)   -> true
+    // >>> RhythmCell([1, -1, 1, 1]).densityIn("4/4") == Rational(3, 1)   -> true
+    densityIn { |span|
+        ^Rational(this.attackCount, 1)
+            / RhythmTree.spanOf(span ?? { Duration(1, 1) }).asRational
+    }
+
+    // Onset-to-onset distances only.
+    //
+    // >>> RhythmCell([1, 1, 1, 1]).attackGapsIn("4/4")
+    // [ Duration(1/4), Duration(1/4), Duration(1/4) ]
+    // >>> RhythmCell([1, -1, 1, 1]).attackGapsIn("4/4")
+    // [ Duration(1/2), Duration(1/4) ]
+    // >>> RhythmCell([1]).attackGapsIn("4/4")   -> [  ]
+    attackGapsIn { |span|
+        var offsets = this.attackOffsetsIn(span);
+        ^offsets.drop(1).collect { |offset, i| offset - offsets[i] }
+    }
+
+    // The question `reduced` doesn't answer, asked directly. `==` is structural
+    // and `reduced` only removes common factors, so both call two spellings of
+    // one rhythm two cells. These read the segments instead, which is what the
+    // lowering will hear.
+    //
+    // `other` is a cell or a bare proportion list, on the pattern `RhythmTree`
+    // sets. `span` is what `segmentsIn` takes, a whole note when omitted. It
+    // scales both sides alike, so it is there to read alongside the rest of the
+    // analysis rather than to decide anything.
 
     // Whether two cells fall the same way: every segment at the same
     // place, for the same length, sounding or silent alike.

@@ -159,6 +159,117 @@
         ^current
     }
 
+    // Note [A phrase is rebuilt once and validated once]
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //
+    // A talea count may straddle a barline. If bars are filled one at a time,
+    // validation can see a tie pointing into old destination music. Rebuild all
+    // selected units first, then validate the finished tree as `repeatMeasures`
+    // does.
+
+    // A copy with one talea carried across selected measure voices.
+    //
+    // Units are `fillMeasures`-style whole bars, consecutive within each lane.
+    // Counts restart per lane. Direct pitch material restarts per lane. A held
+    // `PitchStream` threads in canonical lane order.
+    //
+    // Replaces whole measure voices, not leaf slices.
+    //
+    // >>> { var score = MusicScore.oneStaff([Measure("3/16", "c16 d16 e16"),
+    //     Measure("3/16", "f16 g16 a16")], "V");
+    //     ScoreEdit.fillTalea(score, ScoreSelection(score), Talea([5], 16),
+    //     "c d").leaves.collect { |leaf| leaf.duration } }.value
+    // [ Duration(3/16), Duration(1/8), Duration(1/16) ]
+    // >>> { var score = MusicScore.oneStaff([Measure("3/16", "c16 d16 e16"),
+    //     Measure("3/16", "f16 g16 a16")], "V");
+    //     ScoreEdit.fillTalea(score, ScoreSelection(score), Talea([5], 16),
+    //     "c d").leaves.first.tiesToNext }.value
+    // true
+    //
+    // ^ ScoreElement
+    *fillTalea { |element, selection, talea, pitches|
+        var label = "fillTalea";
+        var units = this.prCheckedUnits(element, selection, label,
+            "bar to fill");
+        var lanes = this.prLanesOf(units);
+
+        this.prCheckedTalea(talea, label);
+        this.prCheckedConsecutiveUnits(units, lanes, label);
+
+        // Refuse ties crossing the selection boundary. Internal ties are
+        // replaced with the selected bars.
+        this.prCheckedWholeLogicalTies(element,
+            this.prUnitRecords(element, units), label);
+
+        // Reject a foreign stream in this method's name rather than Talea's.
+        RhythmTree.pitchStream(pitches, "ScoreEdit.fillTalea");
+
+        // Dry pass first, so structural refusals do not spend a held row.
+        this.prTaleaFilled(element, units, lanes, talea, nil);
+        ^this.prTaleaFilled(element, units, lanes, talea, pitches)
+    }
+
+    // One pass: rows per lane, every measure voice rebuilt, validated once.
+    // A nil material argument is neutral, which is what the dry pass wants.
+    //
+    // ^ ScoreElement
+    *prTaleaFilled { |element, units, lanes, talea, pitches|
+        var replacements = Dictionary.new;
+
+        lanes.do { |lane|
+            var mine = units.select { |unit| unit[\lane] == lane };
+            // Direct material restarts here.
+            // Held streams pass through.
+            var rows = talea.leavesInSpans(
+                mine.collect { |unit| this.prUnitSpanOf(unit) }, pitches);
+
+            mine.do { |unit, index| replacements[unit[\path]] = rows[index] }
+        };
+        ^Validator.validate(this.prRebuiltAll(element, [], replacements))
+    }
+
+    // Use occupied space, so a bracketed bar answers its bar span.
+    //
+    // ^ Duration
+    *prUnitSpanOf { |unit|
+        ^this.prTotalOf(unit[\children].collect { |child|
+            this.prOccupies(child) })
+    }
+
+    // ^ [IdentityDictionary]
+    *prUnitRecords { |element, units|
+        ^units.collect { |unit|
+            this.prSelectionForUnit(element, unit[\path]).records }.flatten(1)
+    }
+
+    // ^ Talea
+    *prCheckedTalea { |talea, label|
+        if (talea.isKindOf(Talea).not) {
+            Error(
+                "ScoreEdit.%: expected a Talea, got %. Use fillMeasures for a per-bar cell."
+                .format(label, talea.asCompileString)
+            ).throw
+        };
+        ^talea
+    }
+
+    // Counts carry over the named barlines.
+    // Gaps are outside the phrase.
+    *prCheckedConsecutiveUnits { |units, lanes, label|
+        lanes.do { |lane|
+            units.select { |unit| unit[\lane] == lane }
+                .collect { |unit| unit[\measureIndex] }
+                .doAdjacentPairs { |before, after|
+                    if (after != (before + 1)) {
+                        Error(
+                            "ScoreEdit.%: bars % and % are selected with a gap between them. Fill each run separately."
+                            .format(label, before, after)
+                        ).throw
+                    }
+                }
+        }
+    }
+
     // Refuse ties wholly selected but split across filled units.
     *prCheckedTiesWithinUnits { |element, units, label|
         var unitOf = Dictionary.new;
@@ -350,25 +461,25 @@
             }).children
     }
 
-    // Simplification and joining.
+    // Simplification and joining
 
     // Note [Simplification is preparation, run backwards]
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //
-    // `simplifyRun` reverses preparation: rests through `prRestRun`, tied leaves
-    // through `prCopyLeaf`, trivial brackets by flattening.
+    // `simplifyRun` reverses preparation: rests through `prRestRun`, tied
+    // leaves through `prCopyLeaf`, trivial brackets by flattening.
     //
     // A chord tie fuses only when every pitch continues. Partial masks stay split.
     //
-    // Outside brackets, use `Meter#isWellPlaced` so fusion doesn't hide a metric
-    // line. Inside brackets, use written `isNotatable`.
+    // Outside brackets, use `Meter#isWellPlaced` so fusion doesn't hide a
+    // metric line. Inside brackets, use written `isNotatable`.
     //
-    // Fusion may carry only first-leaf markings, graces and starts,
-    // last-leaf ordinary stops and first-leaf stops that name the
-    // attack. Anything else is refused by name.
+    // Fusion may carry only first-leaf markings, graces and starts, last-leaf
+    // ordinary stops and first-leaf stops that name the attack. Anything else
+    // is refused by name.
 
-    // A copy of the tree with every selected *bar* simplified.
-    // Whole-unit checks match `repeatMeasures`. Rewrites stay `simplifyRun`'s.
+    // A copy of the tree with every selected *bar* simplified. Whole-unit
+    // checks match `repeatMeasures`. Rewrites stay `simplifyRun`'s.
     //
     // >>> { var score = MusicScore.oneStaff([Measure("4/4", "c4~ c4 r4 r4"),
     //     Measure("4/4", "d4~ d4 e4 f4")], "V");

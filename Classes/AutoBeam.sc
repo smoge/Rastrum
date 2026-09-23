@@ -2,7 +2,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
 // A derived beam stays inside one bar, one voice and one beaming context, then
-// stops at rests. Cross-barline and top-level-bracket beams stay authorial.
+// stops at rests. Cross-barline and top-level-bracket beams stay hand-written.
 //
 // A context is the outermost bracket around a leaf or its timeline. Inner
 // brackets don't split a run inside the same outer bracket.

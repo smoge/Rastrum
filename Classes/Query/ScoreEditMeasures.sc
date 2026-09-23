@@ -97,6 +97,8 @@
         };
         unit[\path] = path;
         unit[\lane] = [first[\staffIndex], first[\voiceIndex]];
+        // bare `Measure` roots have no bar index in their path
+        unit[\measureIndex] = first[\measureIndex];
         unit[\children] = node.children.asArray;
         ^unit
     }

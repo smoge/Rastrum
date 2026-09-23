@@ -8,8 +8,9 @@
 // their slots' passage needs.
 
 SpellingPolicy {
-    // name: Symbol, chooser: Function, requiresWholePassage: Boolean
+    // Built-ins record their spelling Symbol. Composed policies leave it nil.
     //
+    // name: Symbol, chooser: Function, requiresWholePassage: Boolean
     // builtInSpelling: Symbol | Nil, resolver: Function | Nil
     var <name, chooser, <requiresWholePassage, <builtInSpelling, resolver;
 
