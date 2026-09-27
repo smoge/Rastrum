@@ -171,8 +171,8 @@ Meter {
         ^this.levelOf(offset) <= this.levelOf(point)
     }
 
-    // Pulse offsets from the bar start. `pulse` defaults to the unit and may
-    // divide it.
+    // Pulse offsets from the bar start. `pulse` defaults to the unit
+    // and may divide it.
     //
     // >>> Meter(3, 4).pulses
     // [ Duration(0/1), Duration(1/4), Duration(1/2) ]

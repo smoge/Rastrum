@@ -98,7 +98,7 @@ PlaybackEnvelopeMap {
             .collect { |each| each.asSymbol }
     }
 
-    // Segment width for this control; nil when this map does not write it.
+    // Segment width for this control. Nil when this map does not write it.
     //
     // >>> PlaybackEnvelopeMap.new.envelopeAt(0, 0, \pan, [-1, 0, 1], [2, 2]).segments(\pan)
     // 2

@@ -101,7 +101,7 @@
             var leaf = record[\leaf];
             if (leaf.isKindOf(MusicNote).not) {
                 Error(
-                    "ScoreEdit.%: % is a %, not a note. A chord is one note per pitch, so gather notes and nothing else."
+                    "ScoreEdit.%: % is a %, not a note. Gather plain notes only."
                     .format(
                         label,
                         record[\path].asCompileString,
@@ -113,7 +113,7 @@
             // Name the editing method before `Chord` refuses the repeat.
             if (seen.any { |pitch| pitch == leaf.pitch }) {
                 Error(
-                    "ScoreEdit.%: % is already in this run. A chord holds one of each pitch, so a unison needs two voices."
+                    "ScoreEdit.%: % is already in this run. Use two voices for unisons."
                     .format(label, leaf.pitch)
                 ).throw
             };
@@ -136,7 +136,7 @@
 
         carried !? {
             Error(
-                "ScoreEdit.%: the % at % carries %. This helper writes plain material only, so detach or restate it first."
+                "ScoreEdit.%: the % at % carries %. Detach or restate it first."
                 .format(
                     label,
                     saying,
@@ -242,9 +242,7 @@
         ^Validator.validate(selection.transposeBy(interval))
     }
 
-    // A number of semitones is the mistake worth naming: it reaches
-    // `MusicInterval#transpose` as a receiver that does not understand it, so
-    // the unchecked failure is a *transpose not understood* several layers in.
+    // Name the common semitone-count mistake before `transpose` fails below.
     //
     // ^ MusicInterval
     *prCheckedInterval { |interval, label|
@@ -255,10 +253,8 @@
                     label,
                     if (interval.isNil) { "nil" } { interval.class.name },
                     if (interval.isNumber) {
-                    " A count of semitones is not one, because it does not say "
-                    "how to spell what it lands on. Use "
-                    "MusicInterval.named(\\minor, 3), or MusicInterval.between "
-                    "two pitches."
+                    " A count of semitones is not one and does not say how to spell what it lands on. Use "
+                    "MusicInterval.named(\\minor, 3) or MusicInterval.between(p1, p2)."
                     } { "" }
                 )
             ).throw
@@ -289,7 +285,7 @@
         // A pitch also answers `value`, so require the callback shape.
         if (function.isKindOf(Function).not) {
             Error(
-                "ScoreEdit.%: expected a Function, got %. It is asked once per sounding note and answers the pitch that note becomes."
+                "ScoreEdit.%: expected a Function, got %. It maps each sounding note to a pitch."
                 .format(
                     label,
                     if (function.isNil) { "nil" }

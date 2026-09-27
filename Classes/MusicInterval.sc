@@ -101,6 +101,7 @@ MusicInterval {
         ^value
     }
 
+    // See Note [Negative zero cents] in MusicPitch.sc.
     // value: Number
     //
     // ^ Float
@@ -111,7 +112,7 @@ MusicInterval {
         if ((value.abs < inf).not) {
             Error("MusicInterval: cents of % is not finite.".format(value)).throw
         };
-        ^value.asFloat
+        ^value.asFloat + 0.0
     }
 
     // Intervals use the older octave baseline internally. `transpose` reads it
@@ -379,16 +380,22 @@ MusicInterval {
     printOn { |stream|
         stream << "MusicInterval(" << generic << ", "
             << MusicPitch.semitoneNumber(chromatic);
-        if (cents != 0) { stream << ", " << cents };
+        if (cents != 0) { stream << ", " << MusicPitch.prCentsText(cents) };
         stream << ")"
     }
 
     // Store exact semitones as numbers. `Duration` is only the internal carrier.
+    // Cents are written to read back as the same Float.
     //
     // >>> MusicInterval.named(\major, 3).asCompileString
     // MusicInterval(2, 4)
     //
-    // ^ (Integer, Integer | Rational, Float)
-    storeArgs { ^[generic, MusicPitch.semitoneNumber(chromatic), cents] }
+    // ^ Self
+    storeOn { |stream|
+        stream << "MusicInterval(" << generic << ", "
+            <<< MusicPitch.semitoneNumber(chromatic);
+        if (cents != 0) { stream << ", " << MusicPitch.prCentsText(cents) };
+        stream << ")"
+    }
 
 }

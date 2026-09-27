@@ -290,7 +290,7 @@ LilyProfile {
     // `LilyWriter` merges score metadata and writes braces.
     headerLines { ^this.prLinesFor(\header) }
 
-    // Everything above `\score`; "" when there is none.
+    // Everything above `\score`. "" when there is none.
     preambleString {
         var top = this.prLinesFor(\preamble);
         var paper = this.prLinesFor(\paper);

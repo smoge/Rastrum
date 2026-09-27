@@ -217,7 +217,7 @@
         };
         if (graces.not) {
             Error(
-                "%: % carries a grace group. A pitch list names attacks only. Write the ornament in a bar instead."
+                "%: % carries a grace group. Pitch lists name attacks only. Write the ornament in a bar."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
@@ -309,31 +309,25 @@
     *prRefuseWrittenLeaf { |token, whole, label|
         if (token.beginsWith("<")) {
             Error(
-                "%: % is a chord. A pitch list names one pitch per attack, so a chord "
-                "is written out in a bar instead."
+                "%: % is a chord. Pitch lists name one pitch per attack. Write a bar instead."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
         if (this.prLooksLikeTupletToken(token)) {
             Error(
-                "%: % is a tuplet bracket. A pitch list names one pitch per attack and "
-                "the rhythm list says the durations, so a bracket is written out in a "
-                "bar instead."
+                "%: % is a tuplet bracket. Pitch lists name attacks only. The rhythm list says durations."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
         if (this.prHairpinHead(token).notNil) {
             Error(
-                "%: % is a hairpin group. A pitch list cycles and a repeated endpoint "
-                "says nothing, so a span is written out in a bar or attached with "
-                "Spanner instead."
+                "%: % is a hairpin group. Pitch lists cycle, so a repeated endpoint says nothing. Use Spanner."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
         if (this.prGlissandoHead(token).notNil) {
             Error(
-                "%: % is a glissando group. A pitch list cycles, so write the run as a "
-                "bar or attach it with Spanner instead."
+                "%: % is a glissando group. Write a bar or attach the span with Spanner."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
@@ -348,9 +342,7 @@
         // A bare ratio is a bracket typo here too.
         if (this.prIsRatioToken(token)) {
             Error(
-                "%: % is a tuplet ratio. A pitch list names one pitch per attack and "
-                "the rhythm list says the durations, so a bracket is written out in a "
-                "bar instead."
+                "%: % is a tuplet ratio. Pitch lists name attacks only. The rhythm list says durations."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         }
@@ -360,8 +352,7 @@
     *prRefuseLength { |base, token, whole, label|
         var says = { |what, instead|
             Error(
-                "%: % %. A pitch list says nothing about time, which the rhythm "
-                "supplies, so %."
+                "%: % %. A pitch list says nothing about time. %."
                 .format(label, this.prLeafAt(token, whole), what, instead)
             ).throw
         };

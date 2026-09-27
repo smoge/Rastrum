@@ -74,7 +74,7 @@ PlaybackMap {
             \caesura  -> 1.0
         ];
         // Five-deep dynamics saturate at the four-deep endpoints. Rescaling
-        // would change existing scores; the loud end is SC's ordinary 1.0 ceiling.
+        // would change existing scores. The loud end is SC's ordinary 1.0 ceiling.
         // The cost is a flat hairpin between saturated neighbors. Callers
         // can replace the table.
         defaultDynamics = IdentityDictionary[
@@ -187,7 +187,7 @@ PlaybackMap {
 
     interpretsLoudnessEnvelopes { ^loudnessSegments.notNil }
 
-    // Declared width; nil when loudness lowers to scalar keys.
+    // Declared width. Nil when loudness lowers to scalar keys.
     loudnessSegments { ^loudnessSegments }
 
     // The two keys an amplitude envelope writes.

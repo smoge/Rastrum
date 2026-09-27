@@ -117,9 +117,10 @@ MusicIntervalName {
             ).throw
         };
         // Always Float, copied so callers can't mutate stored delta.
+        // See Note [Negative zero cents] in MusicPitch.sc.
         normalized = value.copy;
         normalized[\semitones] = semitones;
-        normalized[\cents] = cents.asFloat;
+        normalized[\cents] = cents.asFloat + 0.0;
         ^normalized
     }
 
@@ -343,13 +344,22 @@ MusicIntervalName {
             << number << ", " << (this.qualityName ?? { quality }) << ")"
     }
 
-    // The printed form drops the delta. Source storage keeps it, but prints
-    // semitones as numbers rather than the internal exact carrier.
+    // The printed form drops the delta. Source storage keeps it, printing
+    // semitones as numbers rather than the internal exact carrier, and cents
+    // to read back as the same Float. A nil quality is left out.
     //
     // >>> MusicInterval.named(\major, 3).signedName.asCompileString.interpret.quality   -> major
-    // ^ (Symbol, Symbol, Integer, Event, Symbol | Event | Nil)
-    storeArgs {
-        ^[convention, direction, number, this.qualityDelta, quality]
+    // >>> MusicInterval(0, 0, 1/3).signedName.asCompileString
+    // MusicIntervalName('signed', 'ordered', 1, ('semitones': 0, 'cents': 0.3333333333333333))
+    //
+    // ^ Self
+    storeOn { |stream|
+        var delta = this.qualityDelta;
+        stream << "MusicIntervalName(" <<< convention << ", " <<< direction
+            << ", " << number << ", ('semitones': " <<< delta[\semitones]
+            << ", 'cents': " << MusicPitch.prCentsText(delta[\cents]) << ")";
+        if (quality.notNil) { stream << ", " <<< quality };
+        stream << ")"
     }
 
     // value: Event

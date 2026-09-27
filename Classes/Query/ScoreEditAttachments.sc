@@ -415,7 +415,7 @@
     }
 
     // A copy of the tree with every touched slur removed. Select any leaf under
-    // it; both ends go.
+    // it. Both ends go.
     //
     // >>> { var bar = Measure("4/4", Spanner.slur("c4 d4 e4 f4"));
     //     ScoreEdit.detachSlurs(bar, ScoreSelection(bar).withinBar("1/4", "1/2"))
@@ -569,7 +569,7 @@
         ^record
     }
 
-    // Source checks know tokens; edit checks know selection paths. A
+    // Source checks know tokens. Edit checks know selection paths. A
     // diagnostic record may carry either. Neither is guaranteed. This
     // runs `beamRun` checks in order and answers records instead of
     // throwing the first one.

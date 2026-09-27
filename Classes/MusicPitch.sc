@@ -416,7 +416,7 @@ MusicPitch {
         var accidental = \natural, octave = 4, cents = 0;
         if (spec.size < 1 or: { spec.size > 4 }) {
             Error(
-                "MusicPitch: a named pitch spec is [noteName, octave] or [noteName, accidental, octave, cents], got %."
+                "MusicPitch: named pitch specs are [noteName, octave] or [noteName, accidental, octave, cents], got %."
                 .format(spec)
             ).throw
         };
@@ -535,11 +535,18 @@ MusicPitch {
         ^value
     }
 
+    // Note [Negative zero cents]
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //
+    // Cents has no signed zero in the model. Sclang hashes -0.0 differently
+    // from 0.0, so normalize with + 0.0 at the storage door.
+
     // Residual deviation, in cents, that no accidental notates.
     // Always a Float, so equal pitches serialize the same way however
     // they were built. Time stays exact. Cents is a measurement.
     //
     // >>> MusicPitch(\c).cents   -> 0.0
+    // >>> MusicPitch.checkedCents(-0.0).asCompileString   -> 0.0
     //
     // ^ Float
     *checkedCents { |value|
@@ -549,7 +556,7 @@ MusicPitch {
         if ((value.abs < inf).not) {
             Error("MusicPitch: cents must be finite, got %.".format(value)).throw
         };
-        ^value.asFloat
+        ^value.asFloat + 0.0
     }
 
     // Answers a pitch for this midinote, spelled with sharps or with
@@ -558,8 +565,8 @@ MusicPitch {
     // lower the letter above it. That keeps quarter-tone spellings
     // consistent too.
     //
-    // `quantum` snaps the incoming Float before spelling. It doesn't choose the
-    // accidental vocabulary; residual distance stays in `cents`.
+    // `quantum` snaps the incoming Float before spelling. It does not
+    // choose the accidental vocabulary. Residual distance stays in `cents`.
     //
     // >>> MusicPitch.fromMidinote(61).accidental            -> sharp
     // >>> MusicPitch.fromMidinote(61, \flats).accidental    -> flat
@@ -750,6 +757,53 @@ MusicPitch {
         ^Rational(number.numerator, number.denominator)
     }
 
+    // Cents as a decimal that reads back as the same Float, in source and on
+    // the JSON wire. The short form stays when it reads back. Otherwise the
+    // fewest digits that do, never in exponent notation, which
+    // `ScoreJSONReader` refuses.
+    //
+    // >>> MusicPitch.prCentsText(-25.0)       -> -25.0
+    // >>> MusicPitch.prCentsText(1/3)         -> 0.3333333333333333
+    // >>> MusicPitch.prCentsText(0.1 + 0.2)   -> 0.30000000000000004
+    // >>> MusicPitch.prCentsText(1e-7)        -> 0.0000001
+    //
+    // ^ String
+    *prCentsText { |cents|
+        var text = cents.asString;
+        var digits = 14;
+        while {
+            (text.includes($.).not or: { text.includes($e) }
+                or: { text.asFloat != cents }) and: { digits < 17 }
+        } {
+            digits = digits + 1;
+            text = this.prPlainDecimal(cents.asStringPrec(digits))
+        };
+        ^text
+    }
+
+    // A `%g` rendering as a plain decimal with a point. Without the point
+    // sclang would read the digits as an Integer, which wraps past 2^31.
+    //
+    // >>> MusicPitch.prPlainDecimal("-1.5e-05")   -> -0.000015
+    // >>> MusicPitch.prPlainDecimal("1e+20")      -> 100000000000000000000.0
+    // >>> MusicPitch.prPlainDecimal("13")         -> 13.0
+    //
+    // ^ String
+    *prPlainDecimal { |text|
+        var at = text.find("e"), sign = "", mantissa, digits, point, plain;
+        if (at.isNil) { ^if (text.includes($.)) { text } { text ++ ".0" } };
+        mantissa = text.copyRange(0, at - 1);
+        if (mantissa[0] == $-) { sign = "-"; mantissa = mantissa.copyToEnd(1) };
+        digits = mantissa.reject { |char| char == $. };
+        // Where the point falls in `digits` once the exponent moves it.
+        point = (mantissa.find(".") ? mantissa.size) + text.copyToEnd(at + 1).asInteger;
+        plain = case
+            { point <= 0 } { "0." ++ String.fill(point.neg, $0) ++ digits }
+            { point >= digits.size } { digits ++ String.fill(point - digits.size, $0) ++ ".0" }
+            { true } { digits.copyRange(0, point - 1) ++ "." ++ digits.copyToEnd(point) };
+        ^sign ++ plain
+    }
+
     // Shared scalar spelling resolver. `quarters` is a number in grid steps.
     //
     // ^ Self
@@ -779,7 +833,7 @@ MusicPitch {
         ^this.new(spec[0], alter, (semis div: 12) - 1, cents)
     }
 
-    // Keep `currentPitch`; fall back to `\minimal` where there is none.
+    // Keep `currentPitch`. Fall back to `\minimal` where there is none.
     //
     // >>> MusicPitch("dbb[4]").spelled(\written).spelling   -> dbb[4]
     // >>> MusicPitch.fromNumber(70, \written).spelling      -> a#[4]
@@ -1163,7 +1217,7 @@ MusicPitch {
     // ^ Self
     printOn { |stream|
         stream << "MusicPitch(" << this.spelling.asCompileString;
-        if (cents != 0) { stream << ", cents: " << cents };
+        if (cents != 0) { stream << ", cents: " << MusicPitch.prCentsText(cents) };
         stream << ")"
     }
 

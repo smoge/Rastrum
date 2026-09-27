@@ -164,7 +164,7 @@ ScoreEdit {
     // See Note [Address edits name their shape].
     //
     // `fromPath` names a node and `toSlotPath` a slot, both read against the
-    // tree as handed in. A move inside one container is refused; use
+    // tree as handed in. A move inside one container is refused. Use
     // `reorderChildrenAt` for that.
     //
     // >>> ScoreEdit.moveElementAt(MusicScore([
@@ -208,7 +208,7 @@ ScoreEdit {
         };
         if (selection.source !== element) {
             Error(
-                "ScoreEdit.%: the selection was read from another tree, so its paths do not address this one. Read with ScoreSelection(score) or ScoreLocator(score, false)."
+                "ScoreEdit.%: the selection was read from another tree. Read a selection from this one."
                 .format(label)
             ).throw
         };
@@ -266,7 +266,7 @@ ScoreEdit {
             var inside = paths.count { |path| chosen.includesKey(path) };
             if (inside > 0 and: { inside < paths.size }) {
                 Error(
-                    "ScoreEdit.%: the selection covers part of a tie. It is written as %, and the rest of it is not selected. Select the tie whole, or edit it with replaceLeavesAt."
+                    "ScoreEdit.%: the selection covers part of a tie written as %. Select it whole, or use replaceLeavesAt."
                     .format(label, paths.asCompileString)
                 ).throw
             }
@@ -319,7 +319,7 @@ ScoreEdit {
             (restated[key] ? 0) < carried[key] };
         short !? {
             Error(
-                "ScoreEdit.%: the run carries % and the replacement does not, so the span would be lost. Restate it on a replacement leaf, or detach the span first."
+                "ScoreEdit.%: the run carries %, but the replacement does not, so the span would be lost. Restate or detach it first."
                 .format(label, this.prSpellEndpoint(short))
             ).throw
         };
@@ -395,7 +395,7 @@ ScoreEdit {
             var path = record[\path];
             if (path.copyRange(0, path.size - 2) != parent) {
                 Error(
-                    "ScoreEdit.%: % and % are in different containers, so there is no one container to rebuild. Reshape a run inside one bar, voice or bracket at a time."
+                    "ScoreEdit.%: % and % are in different containers. Reshape one bar, voice or bracket at a time."
                     .format(
                         label,
                         first.asCompileString,
@@ -405,11 +405,8 @@ ScoreEdit {
             }
         };
         indexes = records.collect { |record| record[\path].last }.sort;
-        // a guard on a destructive rebuild rather than a rule of its
-        // own: the slice runs first to last, so an unselected child
-        // between two selected ones would be deleted without a word.
-        // Contiguity already makes that unreachable, since children
-        // are sequential and none is zero long.
+        // Guard the rebuild from deleting unselected children between the ends.
+        // Contiguity makes this unreachable for normal leaf runs.
         if (indexes.size != (indexes.last - indexes.first + 1)) {
             Error(
                 "ScoreEdit.%: the selected leaves are not consecutive children of %."
@@ -437,7 +434,7 @@ ScoreEdit {
 
         if (list.isEmpty) {
             Error(
-                "ScoreEdit.%: the replacement is empty. Taking a run out leaves a short bar. Replace it with rests instead."
+                "ScoreEdit.%: the replacement is empty. Replace the run with rests instead."
                 .format(label)
             ).throw
         };
@@ -445,7 +442,7 @@ ScoreEdit {
         found = this.prTotalOf(list.collect { |child| this.prOccupies(child) });
         if (found != wanted) {
             Error(
-                "ScoreEdit.%: the replacement occupies % where the run occupies %. A reshaped run fills exactly the space it was given."
+                "ScoreEdit.%: the replacement occupies %, but the run occupies %. A reshaped run fills exactly the space it was given."
                 .format(label, found, wanted)
             ).throw
         };
@@ -799,7 +796,7 @@ ScoreEdit {
 
         if (parent == holder) {
             Error(
-                "ScoreEdit.%: % and slot % are in one container. Use reorderChildrenAt, which names a whole permutation and has no destination to misread."
+                "ScoreEdit.%: % and slot % are in one container. Use reorderChildrenAt."
                 .format(
                     label,
                     from.asCompileString,
@@ -822,7 +819,7 @@ ScoreEdit {
             };
             if (parent[depth] > from[depth]) {
                 Error(
-                    "ScoreEdit.%: slot % is reached through a later sibling of %, so removing % would change what the slot names."
+                    "ScoreEdit.%: slot % is reached through a later sibling of %. Removing % would change that address."
                     .format(
                         label,
                         (parent ++ [index]).asCompileString,

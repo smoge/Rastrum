@@ -116,8 +116,8 @@
         var record = entry[1];
 
         Error(
-            "PlaybackMap: % is written % into the tied note at %, so it is not on the "
-            "attack. A sforzando is an attack, and a tied note is struck once. Write it on the attack."
+            "PlaybackMap: % is written % into the tied note at %, not on the "
+            "attack. A sforzando is an attack. Write it on the attack."
             .format(
                 Marking.sforzandoSpelling(record[\marking].value),
                 record[\offset] - payload[\offset],
@@ -440,16 +440,14 @@
 
     prRefuseHairpinWithoutTarget { |start, stop, direction|
         Error(
-            "PlaybackMap: the % from % to % ends on no dynamic, so it has no target "
-            "amplitude. Mark the closing leaf."
+            "PlaybackMap: the % from % to % ends on no dynamic. Mark the closing leaf."
             .format(direction, start, stop)
         ).throw
     }
 
     prRefuseDynamicInsideHairpin { |at, name, start, stop|
         Error(
-            "PlaybackMap: % at % is inside the hairpin from % to %, so the ramp and "
-            "dynamic both claim that note. Write it at an endpoint."
+            "PlaybackMap: % at % is inside the hairpin from % to %. The ramp and dynamic both claim that note. Write it at an endpoint."
             .format(name, at, start, stop)
         ).throw
     }
@@ -466,8 +464,8 @@
     // more, so name it in the refusal.
     prRefuseSecondTransition { |payload, change|
         Error(
-            "PlaybackMap: % is written % into the tied note at %, which already changes "
-            "once. One held note can carry one internal dynamic step. Call "
+            "PlaybackMap: % is written % into the tied note at %. "
+            "It already changes once. One held note can carry one internal dynamic step. Call "
             "useLoudnessEnvelopes for more."
             .format(
                 change[\name] ?? { "a hairpin" },

@@ -214,7 +214,7 @@ Chord : ScoreLeaf {
         text = tie[0];
         tied = tie[1];
 
-        // `~` ties the whole chord; a mask ties selected pitches. Choose one.
+        // `~` ties the whole chord. A mask ties selected pitches. Choose one.
         if (tied and: { tiesToNext.isKindOf(Boolean).not and: { tiesToNext.notNil } }) {
             Error(
                 "%: % already ties the whole chord. Use either `~` or a per-pitch mask, not both."

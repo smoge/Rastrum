@@ -32,7 +32,7 @@ SpellingPolicy {
     // ^ Self
     *flats { ^this.prBuiltIn(\flats) }
 
-    // Ordered `[noteName, accidental]` rows. First hit wins; misses
+    // Ordered `[noteName, accidental]` rows. First hit wins. Misses
     // fall back.
     //
     // >>> MusicPitch.fromNumber(70, SpellingPolicy.minimal).spelling   -> a#[4]
@@ -49,7 +49,7 @@ SpellingPolicy {
         }, this.prNeedsWholePassage([behind]))
     }
 
-    // Keep one note name when a candidate exists; otherwise fall back.
+    // Keep one note name when a candidate exists. Otherwise fall back.
     //
     // >>> MusicPitch.fromNumber(61, SpellingPolicy.keepNoteName(\d)).spelling   -> db[4]
     // >>> MusicPitch.fromNumber(65, SpellingPolicy.keepNoteName(\b)).spelling   -> f[4]
@@ -368,8 +368,7 @@ SpellingPolicy {
 
         if (spelling.isKindOf(Symbol).not) {
             Error(
-                "SpellingPolicy.distinctLines: base % needs a context per neighbor, "
-                "and this rule spells neighbors from their heights. Use \\minimal, "
+                "SpellingPolicy.distinctLines: base % needs neighbor context. Use \\minimal, "
                 "\\sharps, \\flats, or the policy object for one of them."
                 .format(base.asCompileString)
             ).throw

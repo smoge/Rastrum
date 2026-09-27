@@ -326,6 +326,7 @@ ScoreJSONWriter : ScoreWriter {
     writePitch { |pitch|
         stream << "{\"step\":" << pitch.step << ",\"alter\":";
         this.writePair(pitch.prAlter);
-        stream << ",\"octave\":" << pitch.octave << ",\"cents\":" << pitch.cents << "}";
+        stream << ",\"octave\":" << pitch.octave << ",\"cents\":"
+            << MusicPitch.prCentsText(pitch.cents) << "}";
     }
 }

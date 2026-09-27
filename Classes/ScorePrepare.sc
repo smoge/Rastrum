@@ -484,17 +484,19 @@ ScorePrepare {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //
     // Markings and grace groups belong to the attack, so only the
-    // first fragment keeps them. Spanner starts stay on the first
+    // first fragment keeps them. Breath and caesura are the exception.
+    // They mark the silence after the sound, so they ride on the last
+    // fragment, where the sound ends. Spanner starts stay on the first
     // fragment. Ordinary stops stay on the last. Stops that name the
     // attack stay on the first: glissando stops and stops on a leaf
     // that also starts the same kind.
     //
     // The last fragment inherits the original forward tie. Earlier
-    // fragments tie onward.
+    // fragments tie onward. A fusion reads both ends back the same way.
 
     // Copy one split fragment.
     *prCopyLeaf { |leaf, dur, tieSource, isFirst = true|
-        var mask, copy;
+        var mask, copy, ending;
         copy = case
             { leaf.isKindOf(MusicRest) } { MusicRest(dur) }
             { leaf.isKindOf(Chord) } {
@@ -512,9 +514,15 @@ ScorePrepare {
             { true } {
                 Error("ScorePrepare: cannot copy a %.".format(leaf.class)).throw
             };
-        // Markings and grace groups stay on the attack.
+        // Attack marks come from the first fragment. Breath and caesura come
+        // from the leaf that ends the sound.
+        ending = if (tieSource.notNil and: { tieSource !== leaf }) {
+            tieSource.markings.select { |mark| this.prMarksTheSilenceAfter(mark) }
+        } { [] };
+        copy.markings_(leaf.markings.select { |mark|
+            if (this.prMarksTheSilenceAfter(mark)) { tieSource === leaf } { isFirst }
+        } ++ ending);
         if (isFirst) {
-            copy.markings_(leaf.markings);
             copy.graces_(
                 leaf.graces.collect { |grace| this.prCopyLeaf(grace, grace.dur, grace) },
                 leaf.graceStyle);
@@ -529,6 +537,11 @@ ScorePrepare {
             }
         });
         ^copy
+    }
+
+    // Breath and caesura mark the silence after an attack.
+    *prMarksTheSilenceAfter { |marking|
+        ^marking.isArticulation and: { [\breath, \caesura].includes(marking.value) }
     }
 
     // Endpoints copied to the attacking fragment.

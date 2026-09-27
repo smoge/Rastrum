@@ -180,7 +180,7 @@ Direction {
         if (kind != \tempoRamp) {
             if (id.notNil) {
                 Error(
-                    "Direction: a % direction cannot carry id %. Only tempoRamp uses endpoint ids.".format(kind, id)
+                    "Direction: a % direction can't carry id %. Only tempoRamp has endpoint ids.".format(kind, id)
                 ).throw
             };
             ^nil
@@ -212,7 +212,7 @@ Direction {
     *checkMetronome { |kind, text, unit, perMinute, edge|
         if (unit.isNil != perMinute.isNil) {
             Error(
-                "Direction: a metronome mark needs both unit and perMinute. got % and %.".format(unit, perMinute)
+                "Direction: a metronome mark needs both unit and perMinute, got % and %.".format(unit, perMinute)
             ).throw
         };
         if (this.prIsRampStop(kind, edge)) {
@@ -286,7 +286,7 @@ Direction {
         ^exact
     }
 
-    // Exact kind test; it must stay one.
+    // Exact kind test. It must stay one.
     // `PlaybackTempoMap.prWalk` gates on it before its own predicate
     // runs, so a ramp endpoint answering true would reach the
     // point-tempo path and be compared to point changes as a
@@ -391,7 +391,7 @@ Direction {
     }
 
     // Store through the helper for this kind. `beat` and `bpm` are source
-    // aliases; stored source uses `unit` and `perMinute`.
+    // aliases. Stored source uses `unit` and `perMinute`.
     //
     // >>> Direction.rehearsalMark("A").asCompileString
     // Direction.rehearsalMark("A")

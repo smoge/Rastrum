@@ -421,7 +421,7 @@ RhythmCell {
         ^this.replaceCellAt(path, func.value(this.cellAt(path)))
     }
 
-    // Rewrites several subcells in one pass
+    // Rewrites several subcells in one pass.
     //
     // The function receives the subcell and path. Duplicate paths rewrite once.
     // The result is not reduced.
@@ -445,7 +445,7 @@ RhythmCell {
         ^result
     }
 
-    // Value-based unique paths, preserving first use
+    // Value-based unique paths, preserving first use.
     *prFirstOccurrences { |paths|
         var seen = List.new;
         paths.do { |path|
@@ -690,6 +690,31 @@ RhythmCell {
     // `RhythmTree.weightOf`'s rule, local to this walk
     *prWeightOf { |entry| ^if (entry.isNumber) { entry.abs } { entry[0].abs } }
 
+    // Where `path` lies in `span`, in `segmentsIn`'s time.
+    // A subdivided share covers its contents.
+    //
+    // >>> RhythmCell([1, [2, [1, 1]], 1]).regionAt([1], "4/4")[\duration]   -> Duration(1/2)
+    // >>> RhythmCell([1, [2, [1, 1]], 1]).regionAt([1, 1], "4/4")[\offset]   -> Duration(1/2)
+    // >>> RhythmCell([1, 1]).regionAt(1)[\offset]   -> Duration(1/2)
+    //
+    // ^ IdentityDictionary
+    regionAt { |path, span|
+        var steps = this.prCheckedPath(path);
+        var list = proportions;
+        var offset = Duration(0, 1);
+        var duration = RhythmTree.spanOf(span ?? { Duration(1, 1) });
+
+        steps.do { |step|
+            var weights = list.collect { |entry| RhythmCell.prWeightOf(entry) };
+            var whole = weights.sum;
+            offset = offset + (duration * Duration(weights.keep(step).sum, whole));
+            duration = duration * Duration(weights[step], whole);
+            if (list[step].isNumber.not) { list = list[step][1] }
+        };
+        ^IdentityDictionary[\path -> steps.copy, \offset -> offset,
+            \duration -> duration]
+    }
+
     // Terminal shares including rests. Span-free: a count being a count
     //
     // >>> RhythmCell([1, [2, [3, 4]]]).shareCount   -> 3
@@ -772,6 +797,24 @@ RhythmCell {
     *prReducedEntry { |entry, factor|
         if (entry.isNumber) { ^entry div: factor };
         ^[entry[0] div: factor, this.prReduced(entry[1])]
+    }
+
+    // The flat cell with this cell's timing: a share per segment, weighted by
+    // its duration and negative where it is silent. `reduced` keeps nesting.
+    // This spends it, keeping only what `sameTimingAs` compares.
+    //
+    // >>> RhythmCell([1, [1, [1, 1]]]).flatTimingForm   -> RhythmCell([ 2, 1, 1 ])
+    // >>> RhythmCell([[1, [1, 1]]]).flatTimingForm      -> RhythmCell([ 1, 1 ])
+    flatTimingForm {
+        var rows, common;
+        rows = this.segmentsIn(nil);
+        common = rows.inject(1, { |sofar, row|
+            sofar lcm: row[\duration].denominator });
+        ^RhythmCell(rows.collect { |row|
+            var weight = row[\duration].numerator
+                * (common div: row[\duration].denominator);
+            if (row[\sounds]) { weight } { weight.neg }
+        }).reduced
     }
 
     // Where the attacks fall in a span. Usually that is the question

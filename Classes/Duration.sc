@@ -413,7 +413,8 @@ Duration {
     noteValue   { ^this.notation !? { |x| x[0] } }
 
     // Whether ties can spell this value. Only power-of-two
-    // denominators qualify; 1/3 needs a tuplet.
+    // denominators qualify.
+    // 1/3 needs a tuplet.
     //
     // >>> Duration(5, 8).isTieSplittable   -> true
     // >>> Duration(1, 3).isTieSplittable   -> false

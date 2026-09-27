@@ -101,6 +101,157 @@ Talea {
         ^value
     }
 
+    // From attack offsets in a span, holding each attack to the next.
+    // A leading gap becomes a rest, and no attacks becomes one rest.
+    //
+    // Offsets are sorted and must land on the `1/denominator` grid.
+    // Duplicates and attacks outside the span are refused.
+    //
+    // >>> Talea.fromAttackOffsets([0, 3%/8, 3%/4], 1, 8)
+    // Talea([3, 3, 2], 8)
+    // >>> Talea.fromAttackOffsets([1%/4], Meter(2, 4), 8)   -> Talea([-2, 2], 8)
+    // >>> Talea.fromAttackOffsets([], Meter(4, 4), 8)       -> Talea([-8], 8)
+    //
+    // ^ Talea
+    *fromAttackOffsets { |offsets, span, denominator = 16|
+        var label = "Talea.fromAttackOffsets";
+        var unit = this.checkedDenominator(denominator);
+        var length = this.prUnitsIn(this.prCheckedSpan(span, label), unit,
+            "span", label);
+        var starts = this.prCheckedAttacks(offsets, length, unit, label);
+        var counts = List.new;
+
+        if (starts.isEmpty) { ^this.new([length.neg], unit) };
+        if (starts.first > 0) { counts.add(starts.first.neg) };
+        starts.do { |start, i| counts.add((starts[i + 1] ? length) - start) };
+        ^this.new(counts.asArray, unit)
+    }
+
+    // From attack pulses counted in `1/denominator` units.
+    //
+    // Pulses are sorted whole Integers or Rationals, under the offset rules.
+    //
+    // >>> Talea.fromAttackPulses([0, 3, 6], 1, 8)   -> Talea([3, 3, 2], 8)
+    // >>> Talea.fromAttackPulses([2], Meter(2, 4), 8)   -> Talea([-2, 2], 8)
+    //
+    // ^ Talea
+    *fromAttackPulses { |pulses, span, denominator = 16|
+        var label = "Talea.fromAttackPulses";
+        var unit = this.checkedDenominator(denominator);
+        var length = this.prUnitsIn(this.prCheckedSpan(span, label), unit,
+            "span", label);
+        var starts = this.prCheckedPulses(pulses, length, label);
+        ^this.fromAttackOffsets(starts.collect { |pulse| pulse %/ unit },
+            span, unit)
+    }
+
+    // As `durationsIn` reads a span, except Floats are refused.
+    *prCheckedSpan { |span, label|
+        var length;
+        if (span.isKindOf(Float)) {
+            Error("%: span % is a Float. Use a Meter, a Duration or an exact number.".format(label, span)).throw
+        };
+        length = RhythmTree.spanOf(span);
+        if (length <= Duration(0, 1)) {
+            Error("%: % is not a positive span.".format(label,
+                this.prText(length))).throw
+        };
+        ^length
+    }
+
+    // A length in whole `1/unit` notes.
+    *prUnitsIn { |duration, unit, what, label|
+        var units = duration.asRational * unit;
+        if (units.denominator != 1) {
+            Error("%: % % is not a whole number of 1/% notes.".format(label,
+                what, this.prText(duration), unit)).throw
+        };
+        ^units.numerator.asInteger
+    }
+
+    // Attacks as whole units from the span start.
+    *prCheckedAttacks { |offsets, length, unit, label|
+        var starts = List.new;
+        if (offsets.isSequenceableCollection.not
+            or: { offsets.isKindOf(String) }) {
+            Error("%: % is not a list of attack offsets.".format(label,
+                offsets.asCompileString)).throw
+        };
+        offsets.do { |offset|
+            var start;
+            if (offset.isKindOf(Float) or: {
+                [Integer, Rational, Duration].any { |kind|
+                    offset.isKindOf(kind) }.not }) {
+                Error("%: offset % is not exact. Use an Integer, a Rational or a Duration.".format(label, offset.asCompileString))
+                    .throw
+            };
+            start = this.prUnitsIn(Duration.asDuration(offset), unit,
+                "offset", label);
+            if (start < 0) {
+                Error("%: an attack at % is before the span starts."
+                    .format(label, this.prText(offset))).throw
+            };
+            if (start >= length) {
+                Error("%: an attack at % is at or past the end of the span."
+                    .format(label, this.prText(offset))).throw
+            };
+            starts.add(start)
+        };
+        starts = starts.asArray.sort;
+        starts.doAdjacentPairs { |a, b|
+            if (a == b) {
+                Error("%: two attacks at %.".format(label,
+                    this.prText(Duration(a, unit)))).throw
+            }
+        };
+        ^starts
+    }
+
+    // Whole pulse indices from the span start.
+    *prCheckedPulses { |pulses, length, label|
+        var starts = List.new;
+        if (pulses.isSequenceableCollection.not
+            or: { pulses.isKindOf(String) }) {
+            Error("%: % is not a list of attack pulses.".format(label,
+                pulses.asCompileString)).throw
+        };
+        pulses.do { |pulse|
+            var start;
+            if (pulse.isKindOf(Integer).not
+                and: { pulse.isKindOf(Rational).not }) {
+                Error("%: pulse % is not an Integer or a whole Rational."
+                    .format(label, pulse.asCompileString)).throw
+            };
+            if (pulse.denominator != 1) {
+                Error("%: pulse % is fractional.".format(label, pulse)).throw
+            };
+            start = pulse.numerator.asInteger;
+            if (start < 0) {
+                Error("%: pulse % is before the span starts."
+                    .format(label, start)).throw
+            };
+            if (start >= length) {
+                Error("%: pulse % is at or past the end of the span."
+                    .format(label, start)).throw
+            };
+            starts.add(start)
+        };
+        starts = starts.asArray.sort;
+        starts.doAdjacentPairs { |a, b|
+            if (a == b) {
+                Error("%: two attacks at pulse %.".format(label, a)).throw
+            }
+        };
+        ^starts
+    }
+
+    // A time as a caller writes it: 1, or 3%/8.
+    *prText { |value|
+        var exact = Duration.asDuration(value).asRational;
+        if (exact.denominator == 1) { ^exact.numerator.asInteger };
+        ^exact
+    }
+
     initTalea { |argCounts, argDenominator|
         counts = argCounts;
         denominator = argDenominator;
@@ -123,7 +274,7 @@ Talea {
 
     // Cycled to fill `span`. The final cell is truncated to the
     // remainder with its sign kept. A truncated cell may be a length
-    // no note head spells; `ScorePrepare` splits it later.
+    // no note head spells. `ScorePrepare` splits it later.
     //
     // `span` is a Meter, a Duration or anything `RhythmTree.spanOf`
     // coerces, so a caller never writes the coercion.

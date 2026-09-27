@@ -13,9 +13,8 @@
 
 PitchMaterial {
 
-    // One leaf per row: rest, note or chord.
-    //
-    // Policies also read the passage position.
+    // One leaf per row: rest, note or chord. Policies also read the
+    // passage position.
     //
     // `dur` defaults inside. SuperCollider argument defaults must be literal.
     //
@@ -54,7 +53,7 @@ PitchMaterial {
     // Frequency in, atom out. No pitch, leaf, row or score is built,
     // so the answer goes straight into a row.
     //
-    // Uses the written pitch grid. There is no local grid argument;
+    // Uses the written pitch grid. There is no local grid argument.
     // missed distance stays in `cents`.
     //
     // >>> PitchMaterial.atomFromFreq(440)[\pitchNumber]   -> 69%/1

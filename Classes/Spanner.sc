@@ -224,7 +224,7 @@ Spanner {
         // Containers are not phrases. Use a selection to say which leaves.
         if (leaves.isKindOf(ScoreElement) and: { leaves.isLeaf.not }) {
             Error(
-                "%: a % is not a run of leaves. Use a ScoreSelection and a filter, for example. ScoreSelection(bar).runs.first."
+                "%: a % is not a run of leaves. Use ScoreSelection(bar).runs.first."
                 .format(label, leaves.class)
             ).throw
         };

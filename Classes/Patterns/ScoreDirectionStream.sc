@@ -246,7 +246,7 @@ ScoreDirectionStream {
     // reaches here.
     *prRefuseConflict { |entry|
         Error(
-            "ScoreDirectionStream: two score-wide directions at %, % and %. A score-wide moment needs one reading."
+            "ScoreDirectionStream: two score-wide directions at %, % and %. One moment cannot have two readings."
             .format(entry[0], entry[1], entry[2])
         ).throw
     }

@@ -1,6 +1,6 @@
 + ScoreSelection {
     // These transforms change a copy. `mapLeaves` gives the callback a copied
-    // leaf and the source record. Records and runs are live views; edit only the
+    // leaf and the source record. Records and runs are live views. Edit only the
     // copy.
 
     // Every selected leaf replaced by what the function answers, as a copy of
@@ -12,7 +12,7 @@
         };
         records.do { |record|
             // nil would store no replacement and silently leave the leaf. Copy
-            // the answer before installation; adding a child can repoint it.
+            // the answer before installation. Adding a child can repoint it.
             replacements[record[\path]] = ScorePrepare.copyOf(
                 ScoreSelection.prCheckedLeaf(
                     function.value(ScorePrepare.copyOf(record[\leaf]), record),
@@ -31,7 +31,7 @@
         this.logicalTies.do { |run, index|
             var becomes = MusicPitch.fromSpec(function.value(run, index));
             run[\records].do { |record|
-                // Compare pitch contents with `==`; the run pitch may not be
+                // Compare pitch contents with `==`. The run pitch may not be
                 // the same live object.
                 var at = ScoreSelection.prPitchesOf(record[\leaf])
                     .detectIndex { |pitch| pitch == run[\pitch] };
@@ -55,7 +55,7 @@
     }
 
     // Spell selected pitches with passage context.
-    // One answer per logical tie; only spelling changes.
+    // One answer per logical tie. Only spelling changes.
     //
     // >>> ScoreSelection(Measure("4/4", "c4 c#4 d4 c#4")).spellPitches(\flats).leaves.collect { |leaf| leaf.pitch.spelling }
     // [ c[4], db[4], d[4], db[4] ]
@@ -110,9 +110,9 @@
     }
 
     // Contexts in logical-tie order, using source spellings.
-    // Melodic neighbors may cross barlines; bar rules read `measureIndex`.
+    // Melodic neighbors may cross barlines. Bar rules read `measureIndex`.
     //
-    // `runIndex` addresses one run; chord members share the other
+    // `runIndex` addresses one run. Chord members share the other
     // location keys. Passage answers stay positional.
     //
     // ^ [Event]
@@ -139,7 +139,7 @@
         ^out
     }
 
-    // Run indices grouped by onset; multiple runs mean a chord.
+    // Run indices grouped by onset. Multiple runs mean a chord.
     //
     // ^ [(Duration, [Integer])]
     *prTimelinePositions { |runs, indices|
@@ -199,7 +199,7 @@
         ^this.prPitchesOf(run[\leaves].first).size == 1
     }
 
-    // Both melodic; the earlier one ends at the later one's onset.
+    // Both melodic. The earlier one ends at the later one's onset.
     //
     // ^ Boolean
     *prMeets { |runs, earlier, later|

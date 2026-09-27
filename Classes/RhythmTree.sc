@@ -329,15 +329,23 @@ RhythmTree {
     // `fill` and `measures` wrap a `PitchStream`, which cycles by contract.
     // `measureRow` wraps a counted cursor over atoms, which refuses instead.
 
-    *prFill { |container, span, proportions, leafFor|
+    // `cuts` are barlines known to fall inside `span`, in its own written
+    // time, and `bracketed` says a bracket already encloses it.
+    // See Note [A known barline can veto a bracket].
+    *prFill { |container, span, proportions, leafFor, cuts = #[],
+        bracketed = false|
         // Reduce first so common-factor scaling cannot change notation.
-        var weights, sum, spelling, target;
+        var weights, sum, spelling, target, scale, start;
 
         weights = this.reduceWeights(proportions.collect { |p| this.weightOf(p) });
         sum = weights.sum;
 
         // ScorePrepare will split ties later, so generated RTM may use them.
-        spelling = this.chooseSpelling(span, weights, true);
+        spelling = if (cuts.isEmpty) {
+            this.chooseSpelling(span, weights, true)
+        } {
+            this.prSpellingAcross(span, proportions, weights, cuts, bracketed)
+        };
         target = container;
 
         if (spelling[\actual] != spelling[\normal]) {
@@ -345,6 +353,8 @@ RhythmTree {
             target = Tuplet.ratio(spelling[\actual], spelling[\normal]);
             container.add(target);
         };
+        scale = Duration(spelling[\actual], spelling[\normal]);
+        start = Duration(0, 1);
 
         proportions.do { |p, i|
             var written = span * Duration(
@@ -355,8 +365,11 @@ RhythmTree {
                 )
             } {
                 // The subdivision decides its own spelling.
-                this.prFill(target, written, p[1], leafFor)
-            }
+                this.prFill(target, written, p[1], leafFor,
+                    this.prCutsWithin(cuts, scale, start, written),
+                    bracketed or: { spelling[\actual] != spelling[\normal] })
+            };
+            start = start + written
         };
 
         ^container
@@ -395,10 +408,45 @@ RhythmTree {
     // >>> RhythmTree.chooseSpelling(Duration(3, 16), [1, 1], true)[\actual]   -> 2
     // >>> RhythmTree.chooseSpelling(Duration(1, 1), [1, 1])[\normal]          -> 2
     *chooseSpelling { |span, weights, allowTies = false|
+        ^this.prBestSpelling(span, weights, allowTies, nil)
+    }
+
+    // The best candidate by the score, with `cost`, when given, ranked ahead
+    // of it.
+    *prBestSpelling { |span, weights, allowTies, cost|
+        var best, bestScore;
+
+        this.prSpellingCandidates(span, weights, allowTies).do { |candidate|
+            var score = candidate[\score];
+            var charged;
+            if (cost.notNil) {
+                charged = cost.value(candidate[\actual], candidate[\normal]);
+                score = [charged] ++ score
+            };
+            if (bestScore.isNil or: { this.prIsBetterScore(score, bestScore) }) {
+                best = (actual: candidate[\actual], normal: candidate[\normal]);
+                bestScore = score;
+            }
+        };
+
+        if (best.isNil) {
+            Error(
+                "RhythmTree: % over span % cannot be written as note heads or ties. Use "
+                "a tuplet or different proportions."
+                .format(weights, span)
+            ).throw
+        };
+
+        ^best
+    }
+
+    // Every writable spelling with its score, in the order the ranking reads
+    // them, since an equal score keeps the earlier one.
+    *prSpellingCandidates { |span, weights, allowTies|
         var sum = weights.sum;
         var n = span.numerator;
         var candidates = Set[sum];
-        var best, bestScore, k = 0;
+        var out = [], k = 0;
 
         if (span <= Duration(0, 1)) {
             Error(
@@ -419,23 +467,90 @@ RhythmTree {
                 x.isNotatable or: { allowTies and: { x.isTieSplittable } }
             };
             if (writable) {
-                var score = this.divisorScore(written, normal, actual);
-                if (bestScore.isNil or: { this.prIsBetterScore(score, bestScore) }) {
-                    best = (actual: actual, normal: normal);
-                    bestScore = score;
-                }
+                out = out.add((actual: actual, normal: normal,
+                    score: this.divisorScore(written, normal, actual)))
             }
         };
 
-        if (best.isNil) {
-            Error(
-                "RhythmTree: % over span % cannot be written as note heads or ties. Use "
-                "a tuplet or different proportions."
-                .format(weights, span)
-            ).throw
-        };
+        ^out
+    }
 
-        ^best
+    // Note [A known barline can veto a bracket]
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //
+    // A phrase spread over several bars is lowered over the whole span, then
+    // cut at the barlines by preparation. A candidate is charged before the
+    // ordinary spelling score when a known cut would leave bracketed pieces no
+    // tie spells. With no cut inside the span, the answer is `chooseSpelling`'s.
+
+    // One cell over consecutive spans, as a Voice spelled with the barlines
+    // between them known. For `ScoreEdit.fillPhrase`.
+    *prVoiceAcross { |spans, proportions, pitches|
+        var lengths = spans.collect { |each| this.spanOf(each) };
+        var cuts = [], at = Duration(0, 1);
+        lengths.drop(-1).do { |length|
+            at = at + length;
+            cuts = cuts.add(at)
+        };
+        ^this.prFill(Voice([]),
+            lengths.inject(Duration(0, 1), { |sum, length| sum + length }),
+            RhythmCell.checkedProportions(proportions),
+            this.prCyclingLeaves(this.pitchStream(pitches, "RhythmTree.voice")),
+            cuts)
+    }
+
+    *prSpellingAcross { |span, proportions, weights, cuts, bracketed|
+        ^this.prBestSpelling(span, weights, true, { |actual, normal|
+            this.prCutCost(span, proportions, weights, actual, normal, cuts,
+                bracketed) })
+    }
+
+    // The shares one candidate leaves unspellable at the barlines: a leaf
+    // under a bracket whose pieces no tie spells, or a subdivision that
+    // cannot avoid one however it is spelled.
+    *prCutCost { |span, proportions, weights, actual, normal, cuts, bracketed|
+        var sum = weights.sum;
+        var scale = Duration(actual, normal);
+        var under = bracketed or: { actual != normal };
+        var start = Duration(0, 1);
+        var cost = 0;
+
+        proportions.do { |p, i|
+            var written = span * Duration(weights[i] * actual, sum * normal);
+            var within = this.prCutsWithin(cuts, scale, start, written);
+            if (p.isNumber) {
+                if (under and: { this.prPiecesTie(written, within).not }) {
+                    cost = cost + 1
+                }
+            } {
+                cost = cost + this.prLeastCutCost(written, p[1], within, under)
+            };
+            start = start + written
+        };
+        ^cost
+    }
+
+    *prLeastCutCost { |span, proportions, cuts, bracketed|
+        var weights;
+        if (cuts.isEmpty) { ^0 };
+        weights = this.reduceWeights(proportions.collect { |p| this.weightOf(p) });
+        ^this.prSpellingCandidates(span, weights, true).collect { |candidate|
+            this.prCutCost(span, proportions, weights, candidate[\actual],
+                candidate[\normal], cuts, bracketed) }.minItem ? 0
+    }
+
+    // The barlines inside one share, in its own written time. `cuts` are in
+    // the enclosing time, `scale` is how a bracket there stretches it, and
+    // the share begins at `start`.
+    *prCutsWithin { |cuts, scale, start, length|
+        ^cuts.collect { |cut| (cut * scale) - start }
+            .select { |cut| (cut > Duration(0, 1)) and: { cut < length } }
+    }
+
+    // Whether ties spell every piece of `length` cut at `within`.
+    *prPiecesTie { |length, within|
+        var edges = [Duration(0, 1)] ++ within ++ [length];
+        ^edges.drop(1).every { |edge, i| (edge - edges[i]).isTieSplittable }
     }
 
     // Expansion tuplets double actual until the multiplier is not above one.

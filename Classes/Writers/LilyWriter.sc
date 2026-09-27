@@ -235,15 +235,15 @@ LilyWriter : ScoreWriter {
         ^"-#(make-dynamic-script \"" ++ word ++ "\")"
     }
 
-    // Post-events in LilyPond order: articulations, dynamic, text, tie.
+    // Ordinary post-events. Visitors add ties and leaf closers after this.
     //
     // `^` and `_` place post-events above or below.
     *markingString { |leaf|
         var out = "";
         leaf.articulations.do { |marking|
-            out = out ++ (articulationMarks[marking.value]
-                ?? { Error("LilyWriter: no mark for articulation %".format(
-                    marking.value)).throw })
+            if (this.closingMarks.includes(marking.value).not) {
+                out = out ++ this.articulationMark(marking)
+            }
         };
         leaf.technicals.do { |marking|
             out = out ++ (technicalMarks[marking.value]
@@ -265,6 +265,28 @@ LilyWriter : ScoreWriter {
         leaf.spannerStops.do { |endpoint| out = out ++ this.spannerString(endpoint) };
         leaf.spannerStarts.do { |endpoint| out = out ++ this.spannerString(endpoint) };
         ^out
+    }
+
+    // Note [A breath closes the leaf]
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //
+    // LilyPond treats `\breathe` and `\caesura` as leaf-closing events.
+    // Anything after them is unattached or lands on the silence mark.
+
+    // >>> LilyWriter.closingMarks   -> [ breath, caesura ]
+    *closingMarks { ^[\breath, \caesura] }
+
+    // >>> LilyWriter.closingString(MN("c4").articulation(\caesura).articulation(\staccato))   -> \caesura
+    *closingString { |leaf|
+        ^leaf.articulations.select { |marking|
+            this.closingMarks.includes(marking.value)
+        }.collect { |marking| this.articulationMark(marking) }.join
+    }
+
+    *articulationMark { |marking|
+        ^articulationMarks[marking.value]
+            ?? { Error("LilyWriter: no mark for articulation %".format(
+                marking.value)).throw }
     }
 
     // TextSpanner text is a grob override, so it must precede the start note.
@@ -444,7 +466,7 @@ LilyWriter : ScoreWriter {
         if (note.tiesToNext and: { this.prTieSuppressed(note).not }) {
             stream << "~"
         };
-        stream << " ";
+        stream << LilyWriter.closingString(note) << " ";
     }
 
     // `R` is LilyPond's whole-bar rest. The bar decides which rests are those.
@@ -460,7 +482,8 @@ LilyWriter : ScoreWriter {
         };
         stream << "r" << LilyWriter.durationString(rest.dur)
                << LilyWriter.markingString(rest)
-               << this.prRampMarksAt(rest) << " ";
+               << this.prRampMarksAt(rest)
+               << LilyWriter.closingString(rest) << " ";
     }
 
     // Whole chord ties follow the chord. Partial ties follow noteheads.
@@ -483,7 +506,7 @@ LilyWriter : ScoreWriter {
             << LilyWriter.markingString(chord)
             << this.prRampMarksAt(chord);
         if (whole and: { this.prTieSuppressed(chord).not }) { stream << "~" };
-        stream << " ";
+        stream << LilyWriter.closingString(chord) << " ";
     }
 
     visitTuplet { |tuplet|
@@ -755,7 +778,7 @@ LilyWriter : ScoreWriter {
     prRequireNoOpenRampsAnywhere { |situation|
         if (openRamps.notEmpty) {
             Error(
-                "LilyWriter: a tempo ramp with id % is still open, but %. A span needs both ends in the same staff."
+                "LilyWriter: tempo ramp id % is still open, but %. Span ends must share a staff."
                 .format(openRamps.keys.asArray.sort.join(", "), situation)
             ).throw
         };

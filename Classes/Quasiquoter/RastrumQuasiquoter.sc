@@ -329,7 +329,7 @@ RastrumQuasiquoter {
         current = thisProcess.interpreter.preProcessor;
         if (current.notNil and: { force.not }) {
             Error(
-                "Rastrum: the interpreter already has a preprocessor. Stop it first, or call Rastrum.startQuasiquoter(true) to replace it."
+                "Rastrum: a preprocessor is already installed. Stop it first, or call Rastrum.startQuasiquoter(true)."
             ).throw
         };
         saved = current;
@@ -343,7 +343,7 @@ RastrumQuasiquoter {
     *stop {
         if (this.active.not) {
             if (installed.notNil) {
-                warn("Rastrum: the quasiquoter is no longer the installed preprocessor, so something else replaced it. Restoring ould take that away. Nothing changed.")
+                warn("Rastrum: another preprocessor replaced the quasiquoter. Restoring would remove it. Nothing changed.")
             };
             saved = nil;
             installed = nil;

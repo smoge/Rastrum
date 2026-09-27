@@ -18,7 +18,7 @@ MusicXMLWriter : ScoreWriter {
     // Ties are keyed by voice because they may cross bars.
     var pendingTies, divisions, currentVoice, atPartStart, measureRests, beamRows;
 
-    // Clef in force for the part; repeated only when it changes.
+    // Clef in force for the part. Repeated only when it changes.
     var currentClef, staffClef;
     // Open tempo ramps by id and target.
     var openRamps;
@@ -184,7 +184,7 @@ MusicXMLWriter : ScoreWriter {
             .replace("\"", "&quot;")
     }
 
-    // Tag helpers centralize indentation and escaping; inline builders return
+    // Tag helpers centralize indentation and escaping. Inline builders return
     // compact MusicXML fragments.
 
     prIndent { depth.do { stream << "  " }; ^this }
@@ -260,7 +260,7 @@ MusicXMLWriter : ScoreWriter {
         this.prOpenTag("part-list");
         score.children.do { |staff, i|
             this.prOpenTag("score-part", ["id", "P" ++ (i + 1)]);
-            // `<part-name>` is required; abbreviation is optional.
+            // `<part-name>` is required. Abbreviation is optional.
             this.prTag("part-name", staff.name ? "Part");
             staff.shortName !? { this.prTag("part-abbreviation", staff.shortName) };
             this.prCloseTag("score-part");
@@ -273,7 +273,7 @@ MusicXMLWriter : ScoreWriter {
             measureNumber = 0;
             atPartStart = true;
             currentMeter = nil;
-            // The staff clef opens the part; bars may change it later.
+            // The staff clef opens the part. Bars may change it later.
             staffClef = staff.clef;
             currentClef = nil;
             pendingTies = Dictionary.new;
@@ -308,7 +308,7 @@ MusicXMLWriter : ScoreWriter {
         depth = 2;
         this.prOpenTag("measure", attrs);
         this.writeAttributes(measure, opening);
-        // Directions precede notes; mid-bar directions carry `<offset>`.
+        // Directions precede notes. Mid-bar directions carry `<offset>`.
         // Voices rewind with `<backup>`.
         rampSounds = this.prRampSoundsIn(measure);
         measure.directions.do { |direction|
@@ -357,7 +357,7 @@ MusicXMLWriter : ScoreWriter {
         timeModification = saved;
     }
 
-    // MusicXML writes ties on both leaves; pending ties must land in
+    // MusicXML writes ties on both leaves. Pending ties must land in
     // the next pitched leaf.
     visitNote { |note|
         var stopsHere = this.prConsumePendingTies([note.pitch], "a single note");
@@ -402,7 +402,7 @@ MusicXMLWriter : ScoreWriter {
             this.prOpenMeasureChild("note");
             if (i > 0) { this.prEmptyTag("chord") };
             this.writePitch(p);
-            // Chord-level notations are on the first `<note>`;
+            // Chord-level notations are on the first `<note>`.
             // glissando is per notehead.
             this.writeBody(chord, chord.tiesToNext[i], stops[i], i == 0, i);
             this.prCloseTag("note");
@@ -572,7 +572,7 @@ MusicXMLWriter : ScoreWriter {
         ^meter.groups.join("+")
     }
 
-    // Chord glissandi write one element per notehead; numbers pair endpoints.
+    // Chord glissandi write one element per notehead. Numbers pair endpoints.
 
     glissandoTags { |leaf, noteIndex|
         var glissandi = (leaf.spannerStops ++ leaf.spannerStarts).select {
@@ -817,7 +817,7 @@ MusicXMLWriter : ScoreWriter {
                         .format(direction.id)
                     ).throw
                 };
-                // Store the endpoint; the stop may need its target.
+                // Store the endpoint. The stop may need its target.
                 openRamps[direction.id] = direction;
             } {
                 if (openRamps.includesKey(direction.id).not) {

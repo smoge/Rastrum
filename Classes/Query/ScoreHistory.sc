@@ -36,7 +36,7 @@ ScoreHistory {
     }
 
     // Run the function on `currentScore` and record the score it answers. The
-    // label is checked first; the function may have side effects. Callback and
+    // label is checked first. The function may have side effects. Callback and
     // result checks stay here so refusals name this method.
     //
     // >>> ScoreHistory.start(MusicScore.oneStaff(Measure("1/4", "c4")))

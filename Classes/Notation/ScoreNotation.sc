@@ -59,7 +59,7 @@ ScoreNotation {
             var pickup = false;
             if (bar.isEmpty) {
                 Error(
-                    "%: \"%\" has an empty bar. Every `|` separates two bars, and Measure.rest(meter) is the bar of silence.".format(label, text)
+                    "%: \"%\" has an empty bar. Every `|` separates bars. Use Measure.rest(meter) for silence.".format(label, text)
                 ).throw
             };
             split = this.prNotationMeterAndBar(bar);

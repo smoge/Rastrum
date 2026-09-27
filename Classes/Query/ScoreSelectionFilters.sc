@@ -368,7 +368,7 @@
         var from = Duration.asDuration(start), to = Duration.asDuration(end);
         if (to > from) { ^[from, to] };
         Error(
-            "ScoreSelection.%: window % to % has no length. Use an end after the start, or startingAt for one point."
+            "ScoreSelection.%: window % to % has no length. Use a later end, or startingAt."
             .format(label, from, to)
         ).throw
     }

@@ -82,7 +82,7 @@
         var record = entry[1];
 
         Error(
-            "PlaybackMap: % is written % into the tied note at %, so it is not on the "
+            "PlaybackMap: % is written % into the tied note at %, not on the "
             "attack. Write attack articulations on the attack."
             .format(
                 record[\marking].value,
@@ -94,8 +94,8 @@
 
     prRefuseUnknownArticulationLoudness { |name|
         Error(
-            "PlaybackMap: this score is marked % and the loudness table has no "
-            "multiplier for it. Known articulations: %. Call useArticulationLoudness, "
+            "PlaybackMap: % has no multiplier for it. Known articulations: %. "
+            "Call useArticulationLoudness "
             "or articulationLoudness(%, factor)."
             .format(
                 name,
@@ -109,8 +109,8 @@
     // Only reachable from a table built by `articulation` alone.
     prRefuseUnknownArticulation { |name|
         Error(
-            "PlaybackMap: this score is marked % and the articulation table has no "
-            "legato for it. Known articulations: %. Call useArticulations, or "
+            "PlaybackMap: % has no legato for it. Known articulations: %. "
+            "Call useArticulations or "
             "articulation(%, legato)."
             .format(
                 name,

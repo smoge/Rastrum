@@ -8,7 +8,7 @@
 // detection or prior-change list.
 
 // A delta says kind, address, old and new. The address is a child-index path
-// from the score root; it resolves only against the matching old or new score.
+// from the score root. It resolves only against the matching old or new score.
 //
 // `oldElementFor` and `newElementFor` supply the stored scores, so callers pass
 // only the delta.

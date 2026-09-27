@@ -298,7 +298,7 @@ PlaybackTempoMap {
 
     *prRefuseBackwards { |start, stop|
         Error(
-            "PlaybackTempoMap: the tempo ramp % starts at % and stops at %, so it spans "
+            "PlaybackTempoMap: the tempo ramp % starts at % and stops at %. It spans "
             "no time."
             .format(this.prRampName(start), start[\offset], stop[\offset])
         ).throw
@@ -321,8 +321,7 @@ PlaybackTempoMap {
 
     *prRefuseDangling { |record|
         Error(
-            "PlaybackTempoMap: the tempo ramp % at % is never closed, so there is no "
-            "target moment."
+            "PlaybackTempoMap: the tempo ramp % at % is never closed."
             .format(this.prRampName(record), record[\offset])
         ).throw
     }
@@ -455,8 +454,7 @@ PlaybackTempoMap {
 
     *prRefuseConflict { |entry|
         Error(
-            "PlaybackTempoMap: two tempo directions at %, % and %. One moment cannot "
-            "have two tempo readings."
+            "PlaybackTempoMap: two tempo directions at %, % and %. One moment cannot have two tempo readings."
             .format(entry[0], entry[1], entry[2])
         ).throw
     }

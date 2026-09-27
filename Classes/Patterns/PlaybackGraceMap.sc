@@ -7,7 +7,7 @@
 // A grace leaf's written duration is display value only. This layer
 // chooses the playback length. A plain grace borrows from the
 // previous event and sounds before the beat. An acciaccatura borrows
-// from its host and sounds on the beat. Written offsets do not move;
+// from its host and sounds on the beat. Written offsets do not move.
 // only top-level `dur` changes.
 PlaybackGraceMap {
     var length;

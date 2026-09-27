@@ -92,7 +92,7 @@ RastrumTreeDisplay {
         if (value.isKindOf(ScoreElement).not
             and: { value.isKindOf(RhythmCell).not }) {
             Error(
-                "RastrumTreeDisplay: % is neither a ScoreElement nor a RhythmCell. This view reads those two trees."
+                "RastrumTreeDisplay: % is neither a ScoreElement nor a RhythmCell."
                 .format(value.class)
             ).throw
         };

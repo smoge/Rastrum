@@ -1,5 +1,5 @@
 // Renaming a staff is one fact, `\staffNameChanged`, not removal and
-// re-addition of everything under it. Staff position is the comparison key;
+// re-addition of everything under it. Staff position is the comparison key.
 // the name is a field.
 //
 // A delta's `address` is a child-index path from the score root. The score
@@ -104,7 +104,7 @@ ScoreDiff {
         }
     }
 
-    // `partialChanged` carries `[barDuration, metricOffset]`; either value
+    // `partialChanged` carries `[barDuration, metricOffset]`. Either value
     // alone is incomplete.
     *prMeasureDeltas { |old, new, address, deltas|
         this.prChanged(deltas, \meterChanged, address, old.meter, new.meter);
@@ -286,7 +286,7 @@ ScoreDiff {
 
     // Every address a diff names, once, in the order it named them.
     //
-    // Compare path arrays by `==`; `includes` would only find the same Array
+    // Compare path arrays by `==`. `includes` would only find the same Array
     // object.
     //
     // >>> ScoreDiff.addresses(ScoreDiff.between(

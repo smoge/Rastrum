@@ -52,7 +52,7 @@ ScoreSelection {
                 found = found ? read;
                 if (read !== found) {
                     Error(
-                        "ScoreSelection.fromRecords: these records were read from multiple trees. There is no single source to rewrite."
+                        "ScoreSelection.fromRecords: records come from multiple trees. There is no single source."
                     ).throw
                 }
             }
@@ -322,7 +322,7 @@ ScoreSelection {
         records.do { |record|
             if (record[\leaf].isKindOf(Chord)) {
                 Error(
-                    "ScoreSelection.%: chord at %. Use `notes` for monophonic adjacency or `pitches` for every pitch."
+                    "ScoreSelection.%: chord at %. Use `notes` for monophonic adjacency, or `pitches` for every pitch."
                     .format(label, record[\path].asCompileString)
                 ).throw
             }

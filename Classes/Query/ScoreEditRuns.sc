@@ -117,7 +117,7 @@
     // cell.
     //
     // Units are canonicalized by lane, then bar. Direct material restarts per
-    // lane; a caller-held `PitchStream` threads through all lanes.
+    // lane. A caller-held `PitchStream` threads through all lanes.
     // >>> { var score = MusicScore.oneStaff([Measure("2/4", "c4 d4"),
     //     Measure("2/4", "e4 f4")], "V");
     //     ScoreEdit.fillMeasures(score, ScoreSelection(score), [1, 1], "c d e")
@@ -135,25 +135,115 @@
             "bar to fill");
         // Refuse a bad cell before lowering anything.
         var cell = RhythmCell.checkedProportions(proportions);
+
+        ^this.prFilledUnits(element, units, units.collect { cell }, pitches,
+            label)
+    }
+
+    // A copy of the tree with every selected *measure voice* filled from its
+    // own cell.
+    //
+    // `cells` holds one cell per unit, in `fillMeasures` order: staff, voice,
+    // then bar. Choosing the cells happens outside this call.
+    //
+    // >>> { var score = MusicScore.oneStaff([Measure("2/4", "c4 d4"),
+    //     Measure("2/4", "e4 f4")], "V");
+    //     ScoreEdit.fillMeasuresWithCells(score, ScoreSelection(score),
+    //     [[1, 1], [1, 1, 1]], "c d e f g")
+    //     .leaves.collect { |leaf| leaf.pitch.letter } }.value
+    // [ c, d, e, f, g ]
+    // >>> { var score = MusicScore.oneStaff([Measure("2/4", "c4 d4"),
+    //     Measure("2/4", "e4 f4")], "V");
+    //     ScoreEdit.fillMeasuresWithCells(score, ScoreSelection(score),
+    //     [[1, 1], [1, 1, 1]], "c d e f g").children.first.children
+    //     .collect { |bar| bar.children.first.class.name } }.value
+    // [ MusicNote, Tuplet ]
+    //
+    // ^ ScoreElement
+    *fillMeasuresWithCells { |element, selection, cells, pitches|
+        var label = "fillMeasuresWithCells";
+        var units = this.prCheckedUnits(element, selection, label,
+            "bar to fill");
+        // A var rather than an argument: a refused cell is caught and renamed
+        // inside.
+        var checked = this.prCheckedUnitCells(cells, units, label);
+
+        ^this.prFilledUnits(element, units, checked, pitches, label)
+    }
+
+    // One checked cell per unit, before lowering. A share list is one cell.
+    // Cell contents remain RhythmCell's to judge.
+    //
+    // ^ [Array]
+    *prCheckedUnitCells { |cells, units, label|
+        var checked = List.new;
+
+        if (cells.isSequenceableCollection.not or: { cells.isKindOf(String) }
+            or: { RhythmCell.isShareList(cells) }) {
+            Error(
+                "ScoreEdit.%: expected one cell per selected bar, got %. Use fillMeasures to repeat one cell."
+                .format(label, cells.asCompileString)
+            ).throw
+        };
+        if (cells.size != units.size) {
+            Error(
+                "ScoreEdit.%: cells.size is % and the selection covers % %. Give one cell per bar in staff, voice and bar order."
+                .format(label, cells.size, units.size,
+                    if (units.size == 1) { "bar" } { "bars" })
+            ).throw
+        };
+        // `do` rather than `collect`, since a refusal is caught in the walk.
+        cells.do { |cell, index|
+            var entry = nil, caught = nil;
+            var where = units[index][\path].asCompileString;
+
+            if (cell.isKindOf(RhythmCell).not
+                and: { cell.isSequenceableCollection.not }) {
+                Error(
+                    "ScoreEdit.%: cells[%], for the bar at %, is %, which is not a cell. Use shares, a RhythmCell or an RTM string."
+                    .format(label, index, where, cell.asCompileString)
+                ).throw
+            };
+            try { entry = RhythmCell.checkedProportions(cell) }
+                { |error| caught = error };
+            if (caught.notNil) {
+                Error(
+                    "ScoreEdit.%: cells[%], for the bar at %, is refused. %"
+                    .format(label, index, where,
+                        caught.what ?? { caught.errorString })
+                ).throw
+            };
+            checked.add(entry)
+        };
+        ^checked.asArray
+    }
+
+    // Shared measure-fill body once each unit's cell is known.
+    //
+    // ^ ScoreElement
+    *prFilledUnits { |element, units, cells, pitches, label|
         var lanes = this.prLanesOf(units);
-        var current = element;
+        var dry = element, current = element;
 
         // Name cross-selected-bar ties before a per-unit check sees one half.
         this.prCheckedTiesWithinUnits(element, units, label);
 
         // Reject foreign streams before structural dry-run errors can mask them.
-        RhythmTree.pitchStream(pitches, "ScoreEdit.fillMeasures");
+        RhythmTree.pitchStream(pitches, "ScoreEdit." ++ label);
 
         // Dry-run every unit before spending a caller-visible stream.
-        units.inject(element, { |tree, unit|
-            this.prFilledUnit(tree, unit[\path], cell, nil, label) });
+        units.do { |unit, index|
+            dry = this.prFilledUnit(dry, unit[\path], cells[index], nil, label)
+        };
 
         lanes.do { |lane|
             var stream = if (pitches.isKindOf(PitchStream)) { pitches } {
-                RhythmTree.pitchStream(pitches, "ScoreEdit.fillMeasures") };
-            units.select { |unit| unit[\lane] == lane }.do { |unit|
-                current = this.prFilledUnit(current, unit[\path], cell, stream,
-                    label)
+                RhythmTree.pitchStream(pitches, "ScoreEdit." ++ label) };
+            units.do { |unit, index|
+                if (unit[\lane] == lane) {
+                    current = this.prFilledUnit(current, unit[\path],
+                        cells[index], stream, label)
+                }
             }
         };
         ^current
@@ -170,10 +260,11 @@
     // A copy with one talea carried across selected measure voices.
     //
     // Units are `fillMeasures`-style whole bars, consecutive within each lane.
-    // Counts restart per lane. Direct pitch material restarts per lane. A held
-    // `PitchStream` threads in canonical lane order.
+    // Counts restart per lane. Direct pitch material restarts per lane.
+    // A held `PitchStream` threads in canonical lane order.
     //
-    // Replaces whole measure voices, not leaf slices.
+    // Replaces whole measure voices, not leaf slices. A span with any endpoint
+    // in the range is refused, since the counts carry none.
     //
     // >>> { var score = MusicScore.oneStaff([Measure("3/16", "c16 d16 e16"),
     //     Measure("3/16", "f16 g16 a16")], "V");
@@ -192,14 +283,17 @@
         var units = this.prCheckedUnits(element, selection, label,
             "bar to fill");
         var lanes = this.prLanesOf(units);
+        var records;
 
         this.prCheckedTalea(talea, label);
         this.prCheckedConsecutiveUnits(units, lanes, label);
 
         // Refuse ties crossing the selection boundary. Internal ties are
         // replaced with the selected bars.
-        this.prCheckedWholeLogicalTies(element,
-            this.prUnitRecords(element, units), label);
+        records = this.prUnitRecords(element, units);
+        this.prCheckedWholeLogicalTies(element, records, label);
+        // See Note [A run edit loses no span].
+        this.prCheckedSpans(records, [], label);
 
         // Reject a foreign stream in this method's name rather than Talea's.
         RhythmTree.pitchStream(pitches, "ScoreEdit.fillTalea");
@@ -270,6 +364,115 @@
         }
     }
 
+    // Note [A spread phrase is prepared on its own bars]
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //
+    // A whole-score preparation pass would rewrite music the call never named.
+    // Prepare only the addressed bars, then splice them back.
+
+    // A copy with one rhythm cell spread across selected measure voices.
+    //
+    // Units are whole bars, consecutive within each lane. A lane gets one
+    // phrase. Direct material restarts per lane. A held `PitchStream` threads.
+    //
+    // See Note [A phrase is rebuilt once and validated once].
+    //
+    // >>> { var score = MusicScore.oneStaff([Measure("2/4", "c4 d4"),
+    //     Measure("2/4", "e4 f4")], "V");
+    //     ScoreEdit.fillPhrase(score, ScoreSelection(score), [1, 1, 1],
+    //     "c d e").leaves.collect { |leaf| leaf.tiesToNext } }.value
+    // [ false, true, false, false ]
+    // >>> { var score = MusicScore.oneStaff([Measure("2/4", "c4 d4"),
+    //     Measure("2/4", "e4 f4")], "V");
+    //     ScoreEdit.fillPhrase(score, ScoreSelection(score), [1, 1, 1],
+    //     "c d e").children.first.children.collect { |bar|
+    //     bar.children.first.ratio } }.value
+    // [ Duration(2/3), Duration(2/3) ]
+    //
+    // ^ ScoreElement
+    *fillPhrase { |element, selection, cell, pitches|
+        var label = "fillPhrase";
+        var units = this.prCheckedUnits(element, selection, label,
+            "bar to fill");
+        var lanes = this.prLanesOf(units);
+        // Refuse a bad cell before lowering anything.
+        var proportions = RhythmCell.checkedProportions(cell);
+        var records;
+
+        this.prCheckedConsecutiveUnits(units, lanes, label);
+        // Ties and spans at the range are refused before anything is lowered.
+        records = this.prUnitRecords(element, units);
+        this.prCheckedWholeLogicalTies(element, records, label);
+        this.prCheckedSpans(records, [], label);
+
+        // Reject a foreign stream in this method's name.
+        RhythmTree.pitchStream(pitches, "ScoreEdit.fillPhrase");
+
+        // Dry pass first, so structural refusals do not spend a held row.
+        this.prPhraseFilled(element, units, lanes, proportions, nil);
+        ^this.prPhraseFilled(element, units, lanes, proportions, pitches)
+    }
+
+    // Lower each lane once, prepare detached bars, rebuild, validate.
+    // A nil material argument is neutral.
+    //
+    // ^ ScoreElement
+    *prPhraseFilled { |element, units, lanes, proportions, pitches|
+        var replacements = Dictionary.new;
+
+        lanes.do { |lane|
+            var mine = units.select { |unit| unit[\lane] == lane };
+            // See Note [A known barline can veto a bracket] in RhythmTree.sc.
+            var lowered = RhythmTree.prVoiceAcross(mine.collect { |unit|
+                this.prUnitSpanOf(unit) }, proportions, pitches).children;
+            var staff = Staff(mine.collect { |unit, index|
+                this.prDetachedBar(element, unit,
+                    if (index == 0) { lowered } { [] }) });
+            var prepared = this.prPreparedPhrase(staff, mine).children;
+
+            mine.do { |unit, index|
+                replacements[unit[\path]] =
+                    this.prLaneChildrenOf(prepared[index]) }
+        };
+        ^Validator.validate(this.prRebuiltAll(element, [], replacements))
+    }
+
+    // Prepare detached bars. Retag only the known tuplet-split refusal.
+    //
+    // ^ Staff
+    *prPreparedPhrase { |staff, units|
+        var prepared = nil, caught = nil;
+
+        try { prepared = ScorePrepare.run(staff) } { |error| caught = error };
+        if (caught.isNil) { ^prepared };
+        if (caught.errorString.contains("inside a tuplet cannot be split").not) {
+            caught.throw
+        };
+        Error(
+            "ScoreEdit.fillPhrase: the phrase over bars % to % needs a tuplet bracket split by a barline. Choose shares that divide at each barline, or use fillMeasures. %"
+            .format(units.first[\measureIndex], units.last[\measureIndex],
+                caught.what)
+        ).throw
+    }
+
+    // The unit's bar with only this lane's replacement material.
+    //
+    // ^ Measure
+    *prDetachedBar { |element, unit, children|
+        var measure = this.prSelectionForUnit(element, unit[\path])
+            .records.first[\measure];
+        var copies = children.collect { |child| ScorePrepare.copyOf(child) };
+
+        if (measure.hasVoices.not) { ^ScorePrepare.rebuilt(measure, copies) };
+        ^ScorePrepare.rebuilt(measure, [ScorePrepare.rebuilt(
+            measure.voices[unit[\lane][1]], copies)])
+    }
+
+    // ^ [ScoreElement]
+    *prLaneChildrenOf { |bar|
+        ^if (bar.hasVoices) { bar.voices.first.children } { bar.children }
+    }
+
     // Refuse ties wholly selected but split across filled units.
     *prCheckedTiesWithinUnits { |element, units, label|
         var unitOf = Dictionary.new;
@@ -284,14 +487,14 @@
             if (found.every { |each| each.notNil }
                 and: { found.any { |each| each != found.first } }) {
                 Error(
-                    "ScoreEdit.%: the tie written as % crosses between two selected bars, and each bar is filled on its own, so no fill can keep it. Clear it with clearTies first."
+                    "ScoreEdit.%: the tie written as % crosses between two selected bars. This fill writes each bar alone, so clearTies first."
                     .format(label, run[\paths].asCompileString)
                 ).throw
             }
         }
     }
 
-    // Fill one current-tree unit. `fillMeasures` owns the dry pass.
+    // Fill one current-tree unit. `prFilledUnits` owns the dry pass.
     //
     // ^ ScoreElement
     *prFilledUnit { |element, path, cell, stream, label|
@@ -383,7 +586,7 @@
         exact.do { |each|
             if (each <= Duration(0, 1)) {
                 Error(
-                    "ScoreEdit.%: every duration must be positive, got %. A leaf split does not create rests. Use fillRun when the rhythm itself creates them."
+                    "ScoreEdit.%: every duration must be positive, got %. A leaf split does not create rests. Use fillRun for rests."
                     .format(label, each)
                 ).throw
             }
@@ -436,7 +639,7 @@
         };
         if (cell.attackCount != cell.shareCount) {
             Error(
-                "ScoreEdit.%: a leaf split cannot contain silent shares. Use fillRun when the rhythm itself creates rests."
+                "ScoreEdit.%: a leaf split cannot contain silent shares. Use fillRun for rests."
                 .format(label)
             ).throw
         };
@@ -633,7 +836,7 @@
             if (index < (run.size - 1)
                 and: { this.prTiesInto(leaf, run[index + 1]).not }) {
                 Error(
-                    "ScoreEdit.%: leaf % does not tie into leaf %, so joining them would remove an attack. A run joins when every leaf ties into the next, or when all of them are rests."
+                    "ScoreEdit.%: leaf % does not tie into leaf %. Join tied leaves or all rests."
                     .format(label, index + 1, index + 2)
                 ).throw
             }
@@ -929,12 +1132,18 @@
     }
 
     // Loss to refuse plus the end where the caller could keep it. A first-leaf
-    // attack stop is split output; later stops are loss.
+    // attack stop is split output. Later stops are loss. Breath and caesura
+    // belong only on the last leaf.
     *prFusionLoss { |leaf, index, last|
+        var closing = leaf.markings.select { |mark|
+            ScorePrepare.prMarksTheSilenceAfter(mark) };
         if (index > 0) {
-            if (leaf.hasMarkings) { ^["a marking", "first"] };
+            if (leaf.markings.size > closing.size) { ^["a marking", "first"] };
             if (leaf.hasGraces) { ^["a grace group", "first"] };
             if (leaf.spannerStarts.notEmpty) { ^["a span start", "first"] }
+        };
+        if (index < last and: { closing.notEmpty }) {
+            ^["a %".format(closing.first.value), "last"]
         };
         if (index < last and: { leaf.spannerStops.notEmpty }) {
             if (index == 0 and: { leaf.spannerStops.every { |endpoint|
@@ -1060,7 +1269,7 @@
             this.prCheckedLeaf(leaf, record[\path], label);
             if (leaf.duration != record[\written]) {
                 Error(
-                    "ScoreEdit.%: replacement % is written %, but leaf % is written %. A run is replaced leaf-for-leaf."
+                    "ScoreEdit.%: replacement % is written %, but leaf % is written %. Replace runs leaf-for-leaf."
                     .format(
                         label,
                         index,

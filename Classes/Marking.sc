@@ -150,7 +150,8 @@ Marking {
             this.prCheck(value, technicalMarks, "technical mark"), nil)
     }
 
-    // The technical mark a written suffix names, or nil; no short spellings.
+    // The technical mark a written suffix names, or nil.
+    // No short spellings.
     //
     // >>> Marking.technicalNamed("upbow")   -> upbow
     // >>> Marking.technicalNamed("nope")    -> nil

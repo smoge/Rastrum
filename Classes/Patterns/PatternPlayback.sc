@@ -29,7 +29,7 @@ PatternPlayback {
         ^Pbindf(pattern, *pairs.asArray)
     }
 
-    // Width already on the event; flat default otherwise.
+    // Width already on the event. Flat default otherwise.
     *prWidth { |event, key, otherwise|
         var found = event !? { event[key] };
         if (found.isKindOf(Ref).not) { ^otherwise };

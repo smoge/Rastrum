@@ -169,7 +169,7 @@ ScoreLocator {
         var from = Duration.asDuration(start), to = Duration.asDuration(stop);
         if (to <= from) {
             Error(
-                "ScoreLocator: window % to % has no length. A window is half open, so it needs a stop after its start."
+                "ScoreLocator: window % to % has no length. Use a stop after the start."
                 .format(from, to)
             ).throw
         };

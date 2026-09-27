@@ -78,9 +78,8 @@ MusicScore : ScoreContainer {
     // A body refusal keeps `ScoreNotation.measureRun`'s own wording. Only the
     // coordinate is added. The inner message already owns the bar number.
     //
-    // The throw is caught into a var rather than answered from the handler
-    // because sclang unwinds over a receiver an argument list has already
-    // pushed.
+    // Catch into a var. Returning from this handler unwinds through the
+    // receiver's argument list.
     *prBarRun { |text, place|
         var bars, failure;
         try { bars = ScoreNotation.measureRun(text) } { |error| failure = error };
@@ -185,16 +184,8 @@ MusicScore : ScoreContainer {
         }
     }
 
-    // A staff writes one body per voice and this interleaves them: bar `n` of
-    // every voice becomes the timelines of one bar. They begin at the same
-    // barline.
-    //
-    // They must agree on bar count and on each bar's meter and partial-bar
-    // frame. Agreeing on the frame is what lets an anacrusis be shared rather
-    // than turned into a full bar that is not full.
-    //
-    // Interleaving is the shape no constructor reaches directly. That is why it
-    // earns a key where a written body only saves a call.
+    // Interleaves voice bodies by bar. Voices must share bar count, meter and
+    // partial-bar frame.
     //
     // >>> MusicScore.staves([(voices: [(measures: "1/4; c4"), (measures: "1/4; e4")])]).children.first.children.first.voices.size
     // 2
@@ -284,7 +275,7 @@ MusicScore : ScoreContainer {
         };
         if (bar.hasDirections or: { bar.clef.notNil }) {
             Error(
-                "MusicScore.staves: %, % bar % carries bar facts this rebuild cannot keep. Build that Measure directly."
+                "MusicScore.staves: %, % bar % carries bar facts. Build that Measure directly."
                 .format(place, row[\place], at)
             ).throw
         }

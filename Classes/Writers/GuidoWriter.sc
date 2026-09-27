@@ -521,7 +521,7 @@ GuidoWriter : ScoreWriter {
     *graceString { |leaf, span|
         if (leaf.graceStyle != \grace) {
             Error(
-                "GuidoWriter: % carries an %, and no GMN spelling draws the slash that distinguishes it from a plain grace."
+                "GuidoWriter: % carries an %. GMN cannot draw its slash."
                 .format(leaf.class, leaf.graceStyle)
             ).throw
         };
