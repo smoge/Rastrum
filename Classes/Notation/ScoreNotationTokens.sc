@@ -167,6 +167,18 @@
         ^at
     }
 
+    // The last `char` outside braces, or nil.
+    *prLastOutsideBraces { |text, char|
+        var braces = 0, at;
+        text.do { |each, index|
+            case
+            { each == ${ } { braces = braces + 1 }
+            { each == $} } { braces = max(0, braces - 1) }
+            { each == char and: { braces == 0 } } { at = index }
+        };
+        ^at
+    }
+
     *prSplitOutsideBraces { |text, char|
         var parts = [], current = "", braces = 0;
         text.do { |each|

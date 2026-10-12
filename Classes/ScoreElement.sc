@@ -204,7 +204,7 @@ ScoreLeaf : ScoreElement {
     // See Note [A run of leaves is a run of leaves] in ScoreNotation.sc.
     *prGraceLeaves { |list, style|
         ^ScoreNotation.prChildrenOf(list ? [], "ScoreLeaf.%".format(style),
-            rests: false, containers: false).asArray.copy
+            rests: false, containers: false, markers: \grace).asArray.copy
     }
 
     hasGraces { ^graces.notEmpty }

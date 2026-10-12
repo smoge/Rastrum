@@ -17,7 +17,8 @@ Voice : ScoreContainer {
     //
     // See Note [A run of leaves is a run of leaves] in ScoreNotation.sc.
     *new { |children, name|
-        ^super.new(ScoreNotation.prChildrenOf(children, "Voice")).initVoice(name)
+        ^super.new(ScoreNotation.prChildrenOf(children, "Voice",
+            markers: \written)).initVoice(name)
     }
 
     initVoice { |argName| name = argName; ^this }

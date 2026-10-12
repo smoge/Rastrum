@@ -19,7 +19,7 @@
     // the checker.
     *prNotationIssues { |text, label = "Measure.notation"|
         var whole = text.asString;
-        var tokens, failure;
+        var tokens, failure, markers, found, balance;
 
         // A `try` goes around the call, never inside an argument list.
         try { tokens = this.prNotationTokens(whole, label) }
@@ -29,21 +29,31 @@
             ^[ScoreIssue.prOf(\notationUnclassified, failure)]
         };
 
-        ^tokens.inject([], { |all, token|
+        markers = List.new;
+        found = tokens.inject([], { |all, token|
             var issues = this.prTokenIssues(token, whole, label);
 
             if (issues.isEmpty) {
-                issues = this.prTokenRefusal(token, whole, label)
+                issues = this.prTokenRefusal(token, whole, label, markers)
             };
             all ++ issues
-        })
+        });
+        // Balance only after a clean token walk, so one mistake reports
+        // once and the marker table is complete.
+        if (found.notEmpty) { ^found };
+        balance = this.prSlurBalanceIssue(markers, label,
+            "\"%\"".format(whole));
+        if (balance.isNil) { ^[] };
+        ^[this.prAtToken(ScoreIssue.prOf(\notationUnclassified, balance[0]),
+            balance[1])]
     }
 
     // If this walk finds no code, ask the parser and carry its
     // refusal. The permissive flags keep slot-only refusals out.
-    *prTokenRefusal { |token, whole, label|
+    *prTokenRefusal { |token, whole, label, markers|
         var failure, issue;
-        try { this.prNotationChild(token, whole, label, true, true, true) }
+        try { this.prNotationChild(token, whole, label, true, true, true,
+            markers ?? { List.new }) }
             { |err| failure = err.what };
         if (failure.isNil) { ^[] };
         // The parser already names the token. Add only the column key.
@@ -67,7 +77,7 @@
     // tokens are left for `prTokenRefusal`.
     *prTokenIssues { |token, whole, label, inherited|
         var at = this.prOutsideBraces(token, $[);
-        var head, issue, inside, suffixes, failure;
+        var head, issue, inside, suffixes, failure, peeled;
         inherited = inherited ? [];
         if (at.notNil and: { at > 0 } and: { token.endsWith("]") }) {
             head = this.prBracketHeadMarks(token);
@@ -86,17 +96,25 @@
                 all ++ this.prTokenIssues(each, whole, label,
                     inherited ++ head) })
         };
-        try { suffixes = this.prLeafSuffixes(token, whole, label) }
+        // Peel markers before suffix checks, but let bad clusters reach
+        // `prTokenRefusal`.
+        try { peeled = this.prSlurCluster(token, whole, label, List.new)[0] }
             { |err| failure = err.what };
-        if (failure.notNil) { ^this.prLeafSuffixIssues(token, whole, label) };
+        if (failure.notNil) { ^[] };
+        try { suffixes = this.prLeafSuffixes(peeled, whole, label, true, token) }
+            { |err| failure = err.what };
+        if (failure.notNil) {
+            ^this.prLeafSuffixIssues(peeled, whole, label, token)
+        };
         ^Marking.prLoudnessIssues(inherited ++ suffixes[1]).collect { |issue|
             this.prLocated(issue, token, whole) }
     }
 
-    // A coded suffix refusal, asked only after the suffix pass throws.
-    *prLeafSuffixIssues { |token, whole, label|
+    // A coded suffix refusal, parsed from `token` but located at `written`.
+    *prLeafSuffixIssues { |token, whole, label, written|
         var at = this.prOutsideBraces(token, $:);
         var found, stopped = false;
+        var quoted = written ? token;
         if (at.isNil or: { at == 0 }) { ^[] };
         // Stop where the parser stops.
         this.prSplitOutsideBraces(token.copyToEnd(at + 1), $:).do { |name|
@@ -105,13 +123,13 @@
                 open = name.indexOf(${);
                 suffix = if (open.isNil) { name }
                     { name.copyRange(0, open - 1) };
-                found = this.prAppoggiaturaIssue(suffix, token, whole, label);
+                found = this.prAppoggiaturaIssue(suffix, quoted, whole, label);
                 if (found.notNil) { stopped = true } {
                     // The two suffix readers, asked only for stop position.
                     try {
-                        if (this.prGraceSuffixStyle(name, token, whole, label)
+                        if (this.prGraceSuffixStyle(name, quoted, whole, label)
                             .isNil) {
-                            this.prMarkingNamed(name, token, whole, label)
+                            this.prMarkingNamed(name, quoted, whole, label)
                         }
                     } { |err| failure = err.what };
                     if (failure.notNil) { stopped = true }
@@ -120,7 +138,7 @@
         };
         // A record is a Dictionary, so `asArray` would answer its values.
         if (found.isNil) { ^[] };
-        ^[this.prAtToken(found, token)]
+        ^[this.prAtToken(found, quoted)]
     }
 
     // Add the same source sentence `prRefuseMarks` would throw.

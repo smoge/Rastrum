@@ -19,14 +19,16 @@ Measure : ScoreContainer {
     // A String in the children slot is the notation grammar.
     *new { |meter, children|
         if (children.isKindOf(String)) { ^this.notation(meter, children) };
-        ^super.new(ScoreNotation.prChildrenOf(children, "Measure"))
+        ^super.new(ScoreNotation.prChildrenOf(children, "Measure",
+            markers: \written))
             .initMeasure(meter, nil, nil)
     }
 
     // An explicitly short bar: `barDuration` of written time, beginning
     // `metricOffset` into the meter.
     *partial { |meter, children, barDuration, metricOffset|
-        ^super.new(ScoreNotation.prChildrenOf(children, "Measure.partial"))
+        ^super.new(ScoreNotation.prChildrenOf(children, "Measure.partial",
+            markers: \written))
             .initMeasure(meter, barDuration, metricOffset)
     }
 
@@ -34,7 +36,8 @@ Measure : ScoreContainer {
     *pickup { |meter, children, barDuration|
         var span = Duration.asDuration(barDuration);
         var full = (Meter.asMeter(meter) ?? { Meter(4, 4) }).duration;
-        ^super.new(ScoreNotation.prChildrenOf(children, "Measure.pickup"))
+        ^super.new(ScoreNotation.prChildrenOf(children, "Measure.pickup",
+            markers: \written))
             .initMeasure(meter, span, full - span)
     }
 

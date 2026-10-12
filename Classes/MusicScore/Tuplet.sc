@@ -30,7 +30,8 @@ Tuplet : ScoreContainer {
     //
     // String ratio and String multiplier stay in separate constructors
     *new { |ratio, children|
-        ^super.new(ScoreNotation.prChildrenOf(children, "Tuplet"))
+        ^super.new(ScoreNotation.prChildrenOf(children, "Tuplet",
+            markers: \written))
             .initTuplet(ratio, nil, nil)
     }
 
@@ -58,7 +59,8 @@ Tuplet : ScoreContainer {
 
     // Counts kept as authored. The multiplier they imply is stored beside them.
     *prBuild { |actual, normal, children|
-        ^super.new(ScoreNotation.prChildrenOf(children, "Tuplet.ratio"))
+        ^super.new(ScoreNotation.prChildrenOf(children, "Tuplet.ratio",
+            markers: \written))
             .initTuplet(Duration(normal, actual), actual, normal)
     }
 

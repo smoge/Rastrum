@@ -180,7 +180,7 @@ Direction {
         if (kind != \tempoRamp) {
             if (id.notNil) {
                 Error(
-                    "Direction: a % direction can't carry id %. Only tempoRamp has endpoint ids.".format(kind, id)
+                    "Direction: a % direction cannot carry id %. Only tempoRamp has endpoint ids.".format(kind, id)
                 ).throw
             };
             ^nil

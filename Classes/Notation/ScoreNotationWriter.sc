@@ -2,9 +2,18 @@
 // The public `ScoreNotation.format*` methods forward here.
 ScoreNotationWriter {
 
+    // Public run: approve its printable slurs once, then print.
+    *leafRunString { |children, label|
+        var list = (children ? []).asArray;
+        // Name bad children before group code asks them for leaves.
+        list.do { |child| this.prCheckedChild(child, label) };
+        ^this.prLeafRunString(list, label, nil, 0, this.prApprovedSlurs(list))
+    }
+
     // Children only. Groups may cover several children.
-    // `ignore` holds endpoints an enclosing group already spelled.
-    *leafRunString { |children, label, ignore, drop = 0|
+    // `ignore` is for group endpoints already spelled.
+    // `approved` is for slurs printed as markers.
+    *prLeafRunString { |children, label, ignore, drop = 0, approved|
         var list = (children ? []).asArray;
         var out = List.new;
         var index = 0;
@@ -13,11 +22,15 @@ ScoreNotationWriter {
             Error("%: there is nothing to format.".format(label)).throw
         };
         while { index < list.size } {
-            var group = this.prHairpinGroupAt(list, index, label, ignore, drop)
-                ?? { this.prGlissandoGroupAt(list, index, label, ignore, drop) }
-                ?? { this.prMarkingGroupAt(list, index, label, ignore, drop) };
+            var group = this.prHairpinGroupAt(list, index, label, ignore, drop,
+                approved)
+                ?? { this.prGlissandoGroupAt(list, index, label, ignore, drop,
+                    approved) }
+                ?? { this.prMarkingGroupAt(list, index, label, ignore, drop,
+                    approved) };
             if (group.isNil) {
-                out.add(this.prChildString(list[index], label, ignore, drop));
+                out.add(this.prChildString(list[index], label, ignore, drop,
+                    approved));
                 index = index + 1
             } {
                 out.add(group[1]);
@@ -27,9 +40,42 @@ ScoreNotationWriter {
         ^out.join(" ")
     }
 
+    // Balanced slurs over this run, stops before starts on each leaf.
+    *prApprovedSlurs { |children|
+        var open = Dictionary.new, approved = IdentitySet.new;
+
+        (children ? []).asArray.do { |child|
+            child.leaves.do { |leaf|
+                var slurs = leaf.spanners.select { |each| each.isSlur };
+                slurs.do { |each|
+                    if (each.isStop and: { open[each.id].notNil }) {
+                        approved.add(open.removeAt(each.id));
+                        approved.add(each)
+                    }
+                };
+                slurs.do { |each|
+                    if (each.isStart and: { open[each.id].isNil }) {
+                        open[each.id] = each
+                    }
+                }
+            }
+        };
+        ^approved
+    }
+
+    *prApproved { |endpoint, approved|
+        ^approved.notNil and: { approved.includes(endpoint) }
+    }
+
+    // `(` or `)`, with the id only where it is not 1.
+    *prSlurMarker { |endpoint|
+        ^(if (endpoint.isStart) { "(" } { ")" })
+            ++ (if (endpoint.id == 1) { "" } { endpoint.id.asString })
+    }
+
     // A parser-spellable hairpin group here, or nil.
     // Boundaries must be leaves. Recursion handles groups inside brackets.
-    *prHairpinGroupAt { |list, index, label, ignore, drop = 0|
+    *prHairpinGroupAt { |list, index, label, ignore, drop = 0, approved|
         var leaves = if (list[index].isKindOf(ScoreLeaf)) {
             list[index].leaves
         } {
@@ -55,13 +101,13 @@ ScoreNotationWriter {
         stop = list[at].leaves.last.spanners.detect { |each|
             (each.kind == \hairpin) and: { each.isStop } };
         ^[at - index + 1, "%[%]".format(start.direction,
-            this.leafRunString(list.copyRange(index, at), label,
-                (ignore ? []) ++ [start, stop], drop))]
+            this.prLeafRunString(list.copyRange(index, at), label,
+                (ignore ? []) ++ [start, stop], drop, approved))]
     }
 
     // Parser-spellable `glissando[...]`: one leaf-linked chain.
     // Tied continuations are not new attacks, so they have no group spelling.
-    *prGlissandoGroupAt { |list, index, label, ignore, drop = 0|
+    *prGlissandoGroupAt { |list, index, label, ignore, drop = 0, approved|
         var leaves = List.new;
         var at = index;
         var roles;
@@ -69,13 +115,13 @@ ScoreNotationWriter {
         while { at < list.size } {
             leaves.addAll(list[at].leaves);
             roles = leaves.asArray.collect { |leaf|
-                this.prGlissandoRole(leaf, ignore) };
+                this.prGlissandoRole(leaf, ignore, approved) };
             if (this.prIsGlissandoChain(roles)) {
                 ^[at - index + 1, "glissando[%]".format(
-                    this.leafRunString(list.copyRange(index, at), label,
+                    this.prLeafRunString(list.copyRange(index, at), label,
                         (ignore ? []) ++ leaves.asArray.collect { |leaf|
                             leaf.spanners.select { |each| each.isGlissando }
-                        }.flatten(1), drop))]
+                        }.flatten(1), drop, approved))]
             };
             // A chain still open may reach into the next child. Anything else
             // is not one and will not become one.
@@ -85,10 +131,10 @@ ScoreNotationWriter {
         ^nil
     }
 
-    // What one leaf is in a chain, or nil where it is in none. Every endpoint
-    // must carry the helper's id. Nothing else may ride the leaf.
-    *prGlissandoRole { |leaf, ignore|
-        var left = leaf.spanners.reject { |each| this.prIgnored(each, ignore) };
+    // What one leaf is in a chain. Approved slurs print beside it.
+    *prGlissandoRole { |leaf, ignore, approved|
+        var left = leaf.spanners.reject { |each|
+            this.prIgnored(each, ignore) or: { this.prApproved(each, approved) } };
         var starts = left.select { |each|
             each.isGlissando and: { each.isStart } };
         var stops = left.select { |each|
@@ -122,17 +168,17 @@ ScoreNotationWriter {
 
     // Shared marking prefixes, written once as a group head.
     // `drop` counts prefixes already spelled by enclosing heads.
-    *prMarkingGroupAt { |list, index, label, ignore, drop = 0|
+    *prMarkingGroupAt { |list, index, label, ignore, drop = 0, approved|
         this.prGroupHeadCandidates(list[index].leaves.first, drop).do { |prefix|
             var group = this.prMarkingGroupOn(list, index, label, ignore, drop,
-                prefix);
+                prefix, approved);
             if (group.notNil) { ^group }
         };
         ^nil
     }
 
     // A group must shorten at least two sibling children.
-    *prMarkingGroupOn { |list, index, label, ignore, drop, prefix|
+    *prMarkingGroupOn { |list, index, label, ignore, drop, prefix, approved|
         var at = index;
 
         while {
@@ -146,8 +192,8 @@ ScoreNotationWriter {
         ^[at - index + 1, "%[%]".format(
             prefix.collect { |mark| this.prMarkingSuffix(mark, label) }
                 .join(":"),
-            this.leafRunString(list.copyRange(index, at), label, ignore,
-                drop + prefix.size))]
+            this.prLeafRunString(list.copyRange(index, at), label, ignore,
+                drop + prefix.size, approved))]
     }
 
     // Longest first so `sfz:pp` wins, with fallback to `sfz`.
@@ -221,9 +267,8 @@ ScoreNotationWriter {
         };
         if (measure.isAnacrusis.not) {
             Error(
-                "%: a short bar that is not a pickup has no notation spelling. Write it "
-                "as objects, or use Measure.pickup."
-                .format(label)
+                "%: a short bar that is not a pickup has no notation spelling. "
+                "Use objects or Measure.pickup.".format(label)
             ).throw
         };
         ^text ++ ";; "
@@ -235,22 +280,17 @@ ScoreNotationWriter {
         };
         if (measure.hasVoices) {
             Error(
-                "%: the bar holds voices, which the compact grammar does not read. "
-                "Format one voice's children, or write the bar as objects."
-                .format(label)
+                "%: the bar holds voices. Format one voice's children, or use objects.".format(label)
             ).throw
         };
         if (measure.hasDirections) {
             Error(
-                "%: the bar holds a direction, which is a bar fact the compact grammar "
-                "does not read. Write it as objects."
-                .format(label)
+                "%: the bar holds a direction. Use objects.".format(label)
             ).throw
         };
         measure.clef !? {
             Error(
-                "%: the bar changes clef to %, which the compact grammar does not read. "
-                "Write it as objects."
+                "%: the bar changes clef to %. Use objects."
                 .format(
                     label,
                     measure.clef
@@ -259,9 +299,8 @@ ScoreNotationWriter {
         };
         if (measure.isFull.not) {
             Error(
-                "%: the bar declares % and holds %, and the grammar reads no bar that "
-                "does not fill what it declares. Write it as objects, or use "
-                "Measure.pickup for a short one."
+                "%: the bar declares % and holds %. Use objects, or "
+                "Measure.pickup for a short bar."
                 .format(
                     label,
                     measure.barDuration,
@@ -272,12 +311,17 @@ ScoreNotationWriter {
         ^measure
     }
 
-    *prChildString { |child, label, ignore, drop = 0|
+    *prChildString { |child, label, ignore, drop = 0, approved|
+        this.prCheckedChild(child, label);
         if (child.isKindOf(Tuplet)) {
-            ^this.prTupletString(child, label, ignore, drop)
+            ^this.prTupletString(child, label, ignore, drop, approved)
         };
-        if (child.isKindOf(ScoreLeaf)) {
-            ^this.prLeafString(child, label, ignore, drop)
+        ^this.prLeafString(child, label, ignore, drop, approved)
+    }
+
+    *prCheckedChild { |child, label|
+        if (child.isKindOf(Tuplet) or: { child.isKindOf(ScoreLeaf) }) {
+            ^child
         };
         Error(
             "%: a % has no notation spelling. The grammar reads leaves and brackets."
@@ -285,17 +329,37 @@ ScoreNotationWriter {
         ).throw
     }
 
-    // Stored counts are part of the bracket fact.
-    *prTupletString { |tuplet, label, ignore, drop = 0|
-        ^"%:%[%]".format(tuplet.actualNotes, tuplet.normalNotes,
-            this.leafRunString(tuplet.children, label, ignore, drop))
+    // A grace body prints only notes and chords without spans.
+    *prCheckedGraces { |leaf, label|
+        leaf.graces.do { |grace|
+            if ((grace.isKindOf(MusicNote) or: { grace.isKindOf(Chord) }).not) {
+                Error(
+                    "%: a grace group holds a %. Grace bodies read notes and chords "
+                    "only. Use objects."
+                    .format(label, grace.class)
+                ).throw
+            };
+            if (grace.spanners.notEmpty) {
+                Error(
+                    "%: a grace note holds a % endpoint. Grace bodies read no span. "
+                    "Detach it, or use objects."
+                    .format(label, grace.spanners.first.kind)
+                ).throw
+            }
+        }
     }
 
-    // Head, duration, tie then suffixes.
-    *prLeafString { |leaf, label, ignore, drop = 0|
+    // Stored counts are part of the bracket fact.
+    *prTupletString { |tuplet, label, ignore, drop = 0, approved|
+        ^"%:%[%]".format(tuplet.actualNotes, tuplet.normalNotes,
+            this.prLeafRunString(tuplet.children, label, ignore, drop, approved))
+    }
+
+    // Head, duration, tie, suffixes, then slur markers.
+    *prLeafString { |leaf, label, ignore, drop = 0, approved|
         var text;
 
-        this.prCheckedLeaf(leaf, label, ignore);
+        this.prCheckedLeaf(leaf, label, ignore, approved);
         text = case
             { leaf.isKindOf(Chord) } { this.prChordString(leaf, label) }
             { leaf.isKindOf(MusicRest) } {
@@ -310,9 +374,17 @@ ScoreNotationWriter {
         leaf.markings.drop(drop).do { |marking|
             text = text ++ ":" ++ this.prMarkingSuffix(marking, label)
         };
+        // Grace bodies get no slur approval of their own.
         if (leaf.hasGraces) {
+            this.prCheckedGraces(leaf, label);
             text = text ++ ":%{%}".format(leaf.graceStyle,
-                this.leafRunString(leaf.graces, label))
+                this.prLeafRunString(leaf.graces, label))
+        };
+        // Stored order, so `d4)(` and `d4()` each read back.
+        leaf.spanners.do { |each|
+            if (this.prApproved(each, approved)) {
+                text = text ++ this.prSlurMarker(each)
+            }
         };
         ^text
     }
@@ -335,8 +407,7 @@ ScoreNotationWriter {
     *prPitchToken { |pitch, label|
         if (pitch.cents != 0) {
             Error(
-                "%: % carries % cents, which the compact grammar does not read. Write "
-                "it as objects."
+                "%: % carries % cents. Use objects."
                 .format(
                     label,
                     pitch.spelling,
@@ -357,8 +428,8 @@ ScoreNotationWriter {
 
         if (duration <= Duration(0, 1)) {
             Error(
-                "%: a leaf lasts %, and the grammar reads only a positive duration. "
-                "Write it as objects."
+                "%: a leaf lasts %. The grammar reads only a positive duration. "
+                "Use objects."
                 .format(label, duration)
             ).throw
         };
@@ -396,15 +467,20 @@ ScoreNotationWriter {
             if (marking.placement == \below) { "textBelow" } { "text" }, prose)
     }
 
-    // Anything not already emitted as a group is an unsupported span here.
-    *prCheckedLeaf { |leaf, label, ignore|
-        var left = leaf.spanners.reject { |each| this.prIgnored(each, ignore) };
+    // Refuse any endpoint not emitted by the current spelling.
+    *prCheckedLeaf { |leaf, label, ignore, approved|
+        var left = leaf.spanners.reject { |each|
+            this.prIgnored(each, ignore) or: { this.prApproved(each, approved) } };
 
         if (left.notEmpty) {
             Error(
-                "%: the leaf holds a % endpoint, and the compact grammar writes no such "
-                "span here. Detach it, or write the run as objects."
-                .format(label, left.first.kind)
+                "%: the leaf holds a % endpoint. %"
+                .format(label, left.first.kind, if (left.first.isSlur) {
+                    "Written slurs close in the formatted run. Detach it, or use "
+                    "objects."
+                } {
+                    "Detach it, or use objects."
+                })
             ).throw
         };
         ^leaf
@@ -418,6 +494,8 @@ ScoreNotationWriter {
     //
     // >>> ScoreNotation.formatLeafRun(ScoreNotation.leafRun("c4~ c4 r8."))
     // c[4]4~ c[4]4 r8.
+    // >>> ScoreNotation.formatLeafRun(Spanner.slur("c4 d4 e4"))
+    // c[4]4( d[4]4 e[4]4)
     *formatLeafRun { |children|
         ^ScoreNotationWriter.leafRunString(children,
             "ScoreNotation.formatLeafRun")

@@ -17,9 +17,10 @@ ScoreNotation {
     // >>> ScoreNotation.leafRun("3:2[c8 d8 e8] f4").collect { |each| each.class }
     // [class Tuplet, class MusicNote]
     // >>> ScoreNotation.leafRun("crescendo[c4 d4]").first.spannerStarts.first.direction   -> crescendo
+    // >>> ScoreNotation.leafRun("c4( d4)").last.spannerStops.first.kind   -> slur
     // >>> Measure("4/4", ScoreNotation.leafRun("c4 r4 e2")).leaves.size   -> 3
     *leafRun { |text|
-        ^this.prNotationChildren(text, "ScoreNotation.leafRun")
+        ^this.prWrittenRun(text, "ScoreNotation.leafRun")
     }
 
     // `|` separates bars. A meter persists until another bar states one.
@@ -102,9 +103,8 @@ ScoreNotation {
     //
     // A written bar is one timeline. The trailing number is a
     // duration. Pitch slots use marks or bracketed octaves for
-    // register. Tokens cover leaves with suffixes, tuplets, hairpin
-    // groups, glissando groups and marking groups. Other cross-leaf
-    // facts stay objects.
+    // register. Tokens cover suffixes, slur markers, tuplets and groups.
+    // Other cross-leaf facts stay objects.
     //
     // The one-String `Measure.notation` form shares this split with
     // `measureRun`. A written line must fill its meter unless it uses
@@ -171,8 +171,9 @@ ScoreNotation {
     // Keep refusals in the caller's words.
     *prNotation { |meter, text, whole, label = "Measure.notation", at|
         var bar = Meter.asMeter(meter) ?? { Meter(4, 4) };
-        var built = Measure.new(bar, this.prNotationChildren(text, label, true,
-            " Measure.rest(meter) is the bar of silence."));
+        var built = Measure.new(bar, this.prWrittenRun(text, label, true,
+            " Measure.rest(meter) is the bar of silence.", true, true,
+            this.prBarAt(whole ? text, at)));
         if (built.isFull.not) {
             Error(
                 "%: % comes to %, but a % bar holds %. Use Measure.partial or Measure.pickup for a short bar."
@@ -192,8 +193,9 @@ ScoreNotation {
     // body names the span. The meter decides where that span sits.
     *prNotationPickup { |meter, text, whole, label = "Measure.notation", at|
         var bar = Meter.asMeter(meter) ?? { Meter(4, 4) };
-        var children = this.prNotationChildren(text, label, true,
-            " Measure.rest(meter) is the bar of silence.");
+        var children = this.prWrittenRun(text, label, true,
+            " Measure.rest(meter) is the bar of silence.", true, true,
+            this.prBarAt(whole ? text, at));
         var span = ScoreContainer(children).duration;
         if (span >= bar.duration) {
             Error(
@@ -219,11 +221,13 @@ ScoreNotation {
     //
     // `containers` admits tuplets. Leaf-only slots set it false. A
     // `ScoreSelection` is an already chosen run.
+    //
+    // `markers` is `\written` or a refusal reason.
     *prChildrenOf { |children, label, rests = true, containers = true,
-        hairpinGroups = true|
+        hairpinGroups = true, markers|
         if (children.isKindOf(String)) {
-            ^this.prNotationChildren(children, label, rests, "", containers,
-                hairpinGroups)
+            ^this.prChildrenFragment(children, label, rests, containers,
+                hairpinGroups, markers)
         };
         if (children.isKindOf(ScoreSelection)) { ^children.leaves };
         if (children.isSequenceableCollection and: {
@@ -231,8 +235,8 @@ ScoreNotation {
         }) {
             ^children.asArray.inject([], { |all, child|
                 if (child.isKindOf(String)) {
-                    all ++ this.prNotationChildren(child, label, rests, "",
-                        containers, hairpinGroups)
+                    all ++ this.prChildrenFragment(child, label, rests,
+                        containers, hairpinGroups, markers)
                 } {
                     all ++ [child]
                 }
@@ -241,9 +245,79 @@ ScoreNotation {
         ^children
     }
 
+    // Fragments share no slur, so each balances alone.
+    *prChildrenFragment { |text, label, rests, containers, hairpinGroups,
+        markers|
+        if (markers == \written) {
+            ^this.prWrittenRun(text, label, rests, "", containers,
+                hairpinGroups)
+        };
+        ^this.prNotationChildren(text, label, rests, "", containers,
+            hairpinGroups, markers)
+    }
+
     // A written run of leaves. The holder adds its own rule.
-    *prNotationLeaves { |text, label = "Measure.notation", rests = true, hint = ""|
-        ^this.prNotationChildren(text, label, rests, hint, false)
+    *prNotationLeaves { |text, label = "Measure.notation", rests = true, hint = "",
+        markers|
+        ^this.prNotationChildren(text, label, rests, hint, false, true, markers)
+    }
+
+    // Only written runs collect markers. Other slots pass a refusal
+    // reason. Balance reads stops before starts on each leaf, like
+    // `Validator`. Attachment keeps written order.
+
+    // `where` names the run in a balance refusal.
+    *prWrittenRun { |text, label, rests = true, hint = "", containers = true,
+        hairpinGroups = true, where|
+        var markers = List.new;
+        var children = this.prNotationChildren(text, label, rests, hint,
+            containers, hairpinGroups, markers);
+        var issue = this.prSlurBalanceIssue(markers, label,
+            where ?? { "\"%\"".format(text) });
+        if (issue.notNil) { Error(issue[0]).throw };
+        markers.do { |entry| entry[0].attach(entry[1]) };
+        ^children
+    }
+
+    // The first balance error as [message, token], or nil.
+    *prSlurBalanceIssue { |markers, label, where|
+        var open = Dictionary.new, at = 0, left;
+        while { at < markers.size } {
+            var leaf = markers[at][0], ends = List.new;
+            while { (at < markers.size) and: { markers[at][0] === leaf } } {
+                ends.add(markers[at]);
+                at = at + 1
+            };
+            ends.do { |entry|
+                if (entry[1].isStop) {
+                    if (open[entry[1].id].isNil) {
+                        ^this.prSlurIssue(entry, label, where,
+                            "closes slur % with no open start. Use \"c4( d4)\".")
+                    };
+                    open.removeAt(entry[1].id)
+                }
+            };
+            ends.do { |entry|
+                if (entry[1].isStart) {
+                    if (open[entry[1].id].notNil) {
+                        ^this.prSlurIssue(entry, label, where,
+                            "opens slur % while it is still open. Close it first, "
+                            "or give the next one an id.")
+                    };
+                    open[entry[1].id] = entry
+                }
+            }
+        };
+        left = markers.detect { |entry| open[entry[1].id] === entry };
+        if (left.isNil) { ^nil };
+        ^this.prSlurIssue(left, label, where,
+            "opens slur % and the run ends before it closes. Close it here, or "
+            "attach endpoints.")
+    }
+
+    *prSlurIssue { |entry, label, where, text|
+        ^["%: \"%\" in % %".format(label, entry[2], where,
+            text.format(entry[1].id)), entry[2]]
     }
 
     // Note [A bracket is the one container a run admits]
@@ -254,9 +328,9 @@ ScoreNotation {
     //
     // Leaf-only slots refuse tuplets and hairpin groups. Marking
     // groups expand to leaves. Hairpin bodies set `hairpinGroups`
-    // false through brackets.
+    // false through brackets. Group bodies pass `markers` through.
     *prNotationChildren { |text, label = "Measure.notation", rests = true,
-        hint = "", containers = true, hairpinGroups = true|
+        hint = "", containers = true, hairpinGroups = true, markers|
         var tokens;
         if (text.isKindOf(String).not) {
             Error(
@@ -274,13 +348,13 @@ ScoreNotation {
         // Hairpin and marking groups answer arrays. Splice one level.
         ^tokens.inject([], { |all, token|
             var child = this.prNotationChild(token.stripWhiteSpace, text, label,
-                rests, containers, hairpinGroups);
+                rests, containers, hairpinGroups, markers);
             if (child.isKindOf(Array)) { all ++ child } { all.add(child) }
         })
     }
 
     *prNotationChild { |token, whole, label, rests, containers,
-        hairpinGroups = true|
+        hairpinGroups = true, markers|
         var direction = this.prHairpinHead(token);
         var marking;
         if (direction.notNil) {
@@ -297,7 +371,7 @@ ScoreNotation {
                     .format(label, this.prLeafAt(token, whole))
                 ).throw
             };
-            ^this.prNotationHairpin(token, direction, whole, label, rests)
+            ^this.prNotationHairpin(token, direction, whole, label, rests, markers)
         };
         // See Note [A glissando group is a chain of pairs] in ScoreNotationGroups.sc.
         if (this.prGlissandoHead(token).notNil) {
@@ -306,13 +380,13 @@ ScoreNotation {
                     "%: % is a glissando group, but this slot takes leaves only.".format(label, this.prLeafAt(token, whole))
                 ).throw
             };
-            ^this.prNotationGlissando(token, whole, label)
+            ^this.prNotationGlissando(token, whole, label, markers)
         };
         // Before tuplets, but unknown heads stay unreserved.
         marking = this.prMarkingGroupHead(token);
         if (marking.notNil) {
             ^this.prNotationMarkingGroup(token, marking, whole, label, rests,
-                containers, hairpinGroups)
+                containers, hairpinGroups, markers)
         };
         this.prRefuseMarkingGroupHead(token, whole, label);
         if (this.prLooksLikeTupletToken(token).not) {
@@ -339,13 +413,13 @@ ScoreNotation {
                     "%: % is a marking name with no bracket. Use \"%[c4 d4]\".".format(label, this.prLeafAt(token, whole), token)
                 ).throw
             };
-            ^this.prNotationLeaf(token, whole, label, rests)
+            ^this.prNotationLeaf(token, whole, label, rests, markers)
         };
         if (containers.not) {
             Error(
                 "%: % is a tuplet, but this slot takes leaves only.".format(label, this.prLeafAt(token, whole))
             ).throw
         };
-        ^this.prNotationTuplet(token, whole, label, rests, hairpinGroups)
+        ^this.prNotationTuplet(token, whole, label, rests, hairpinGroups, markers)
     }
 }

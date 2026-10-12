@@ -1,5 +1,23 @@
 # Rastrum
 
+```
+                .---------------+----------------.
+                |                                |
+          .-----+----.                       .---+----.
+          |          |                       |        |
+       .--+--.       |                       |     .--+--.
+       |=====|       |                       |     |=====|
+  -----|-----|-------|-----------------------|-----|-----|---
+       |     |       |                       |     |     |
+  -----|-----Ж-------|-----------------------|-----Ж-----|---
+       |             |                       |           |
+  -----|-------------Ж---[ R a s t r u m ]---|-----------Ж---
+       |             |                       |
+  -----Ж-------------Ж-----------------------|---------------
+                                             |
+  -------------------------------------------Ж---------------
+```
+
 Music notation for SuperCollider: a score model with LilyPond, MusicXML, GUIDO
 and ScoreJSON writers.
 
@@ -18,8 +36,6 @@ fact. ScoreJSON leaves that policy out.
 ScoreJSON is an exchange format for scores: versioned, open, and not tied to one
 program's model. Two programs can trade a score without either one moving into
 the other's house.
-
-**Status: experimental.** The API may still change.
 
 
 ## Minimal Example
@@ -246,11 +262,12 @@ An editor mode could learn the block syntax too. Nothing in the quasiquoter
 prevents that. It isn't this quark's layer. Rastrum ships classes and a
 preprocessor, not editor modes.
 
-Spanners, voices and bar-level objects stay ordinary objects around compact leaves:
+Voices and bar-level objects stay ordinary objects around compact leaves, and a
+span helper still takes a written run:
 
 ```supercollider
 ~phrase = Measure("3/4", [
-    Voice(Spanner.slur("c4 d4 e4"), "upper"),
+    Voice("c4( d4 e4)", "upper"),
     Voice(Spanner.crescendo("<g b>4 <a c'>4 <b d'>4"), "lower")
 ]);
 ```
@@ -258,10 +275,11 @@ Spanners, voices and bar-level objects stay ordinary objects around compact leav
 The bar parser reads a run of tokens: pitch plus note value, `c*5/8` for an
 exact rational duration, `r` for a rest, `'` and `,` for register, `<c e g>4`
 for a chord, trailing `~` for a tie, `3:2[c4 d4 e4]` for a tuplet bracket,
-`crescendo[c4 d4]` or `cresc[c4 d4]` for a hairpin, and `gliss[c4 e4]` for a
-glissando chain. A hairpin run may hold a tuplet between endpoints. Above
-leaves and tuplets, everything stays an object: voices, slurs, beams, directions
-and barlines.
+`crescendo[c4 d4]` or `cresc[c4 d4]` for a hairpin, `gliss[c4 e4]` for a
+glissando chain, and trailing `(` and `)` for slur ends, as in `c4( d4)`. A
+hairpin run may hold a tuplet between endpoints. Above leaves and tuplets,
+voices, beams, directions and bar-level facts stay objects. A slur across a
+barline still uses `Spanner.slur(...)`.
 
 A written line puts the meter first, as in `"4/4 c4 d4 e2"`, and several bars
 are separated by `|` with the meter stated only where it changes. A semicolon
@@ -542,8 +560,10 @@ spanner.
 `splitLeafByProportions` and `splitLeafByDurations` divide one leaf into
 fragments. Notes and chords tie across them. Rests stay rests. `joinLeaves` is
 their inverse. `fillMeasures` fills whole bars from one cell, with the row
-reading across the bars of a lane, and `fillTalea` carries one `Talea` across
-those barlines, where a count that straddles one is a tie.
+reading across the bars of a lane, and `fillMeasuresWithCells` does the same
+with a cell chosen for each bar. `fillPhrase` spreads one cell over the whole
+run instead, and `fillTalea` carries one `Talea` over it. Either ties a note
+across a barline it straddles.
 
 ```supercollider
 ~loop = MusicScore.oneStaff([

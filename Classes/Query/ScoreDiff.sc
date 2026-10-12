@@ -277,6 +277,27 @@ ScoreDiff {
         ^deltas.select { |delta| ScoreDiff.prIsPrefix(steps, delta[\address]) }
     }
 
+    // Deltas outside the given regions. Each address covers itself and its
+    // descendants; an empty address list covers nothing.
+    //
+    // >>> ScoreDiff.deltasOutside(ScoreDiff.between(
+    //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
+    //     MusicScore.oneStaff(Measure("2/4", "c4 e4"))), [[0, 0, 1]]).size
+    // 0
+    // >>> ScoreDiff.deltasOutside(ScoreDiff.between(
+    //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
+    //     MusicScore.oneStaff(Measure("2/4", "c4 e4"))), [[0, 0, 0]])
+    //     .collect { |delta| delta[\address] }
+    // [ [ 0, 0, 1 ] ]
+    // >>> ScoreDiff.deltasOutside([], [[0, 0]]).isEmpty   -> true
+    //
+    // ^ [IdentityDictionary]
+    *deltasOutside { |deltas, addresses|
+        var regions = this.prAddresses(addresses, "deltasOutside");
+        ^deltas.reject { |delta|
+            regions.any { |steps| ScoreDiff.prIsPrefix(steps, delta[\address]) } }
+    }
+
     // ^ Boolean
     *prIsPrefix { |prefix, path|
         if (prefix.size > path.size) { ^false };
@@ -408,6 +429,29 @@ ScoreDiff {
         ^steps
     }
 
+    // Addresses in a list must each be an Array. An Integer there is refused
+    // rather than read as one step, since [0, 1] could name one address or two.
+    //
+    // ^ [[Integer]]
+    *prAddresses { |addresses, label|
+        if (addresses.isArray.not) {
+            Error(
+                "ScoreDiff.%: addresses must be an Array of addresses, got % (%)."
+                .format(label, addresses.asCompileString, addresses.class)
+            ).throw
+        };
+        addresses.do { |address|
+            if (address.isArray.not) {
+                Error(
+                    "ScoreDiff.%: % among the addresses is not an address Array."
+                    .format(label, address.asCompileString)
+                ).throw
+            };
+            this.prAddress(address, label)
+        };
+        ^addresses
+    }
+
     // >>> ScoreDiff.countByKind([])   -> IdentityDictionary[  ]
     // >>> ScoreDiff.countByKind(ScoreDiff.between(
     //     MusicScore.oneStaff(Measure("1/4", "c4")),
@@ -420,6 +464,40 @@ ScoreDiff {
         deltas.do { |delta|
             counts[delta[\kind]] = (counts[delta[\kind]] ? 0) + 1 };
         ^counts
+    }
+
+    // The kinds a diff holds besides the `allowed` ones, each once, in the
+    // order it names them. Empty when every delta is of an allowed kind.
+    //
+    // >>> ScoreDiff.unexpectedKinds(ScoreDiff.between(
+    //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
+    //     MusicScore.oneStaff(Measure("2/4", "c4:f e4"))), [\pitchChanged])
+    // [ markingsChanged ]
+    // >>> ScoreDiff.unexpectedKinds([], [\pitchChanged]).isEmpty   -> true
+    //
+    // ^ [Symbol]
+    *unexpectedKinds { |deltas, allowed|
+        var kinds = this.prKinds(allowed, "unexpectedKinds");
+        var seen = List.new;
+        deltas.do { |delta|
+            var kind = delta[\kind];
+            if (kinds.includes(kind).not and: { seen.includes(kind).not }) {
+                seen.add(kind)
+            }
+        };
+        ^seen.asArray
+    }
+
+    // ^ [Symbol]
+    *prKinds { |kinds, label|
+        if (kinds.isArray.not
+            or: { kinds.any { |kind| kind.isKindOf(Symbol).not } }) {
+            Error(
+                "ScoreDiff.%: allowed kinds must be an Array of Symbols, got %."
+                .format(label, kinds.asCompileString)
+            ).throw
+        };
+        ^kinds
     }
 
     // leaf content facts for a leaf that stayed at the same path

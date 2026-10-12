@@ -1,20 +1,29 @@
 // Leaf parsing for `ScoreNotation`.
 //
 // One written token into one leaf: pitch spelling and register,
-// length and tie, plus suffixes: marks, text and a grace group.
-// Brackets and bars stay with the grammar.
+// length and tie, plus suffixes: marks, text and a grace group, then
+// any terminal slur markers. Brackets and bars stay with the grammar.
 
 + ScoreNotation {
 
-    // Pitch spelling, register marks then length. `rests` is caller policy.
-    *prNotationLeaf { |token, whole, label = "Measure.notation", rests = true|
-        // The token as written, since suffix and tie passes rewrite `token`.
-        var written = token;
+    // Parse one leaf and record terminal slur markers for its written run.
+    *prNotationLeaf { |token, whole, label = "Measure.notation", rests = true,
+        markers|
+        var cluster = this.prSlurCluster(token, whole, label, markers);
+        var leaf = this.prPeeledLeaf(cluster[0], whole, label, rests, token);
+        cluster[1].do { |endpoint| markers.add([leaf, endpoint, token]) };
+        ^leaf
+    }
+
+    // Parse after marker peel; `written` stays available for refusals.
+    *prPeeledLeaf { |token, whole, label = "Measure.notation", rests = true,
+        written|
         var at, head, tail, octave, tie, tied, star, value;
         // Suffixes come off first.
-        var marks = this.prLeafSuffixes(token, whole, label);
+        var marks = this.prLeafSuffixes(token, whole, label, true, written);
         var markings = marks[1];
         var group = marks[2];
+        written = written ? token;
         token = marks[0];
         tie = this.prTieSuffix(token, whole, label);
         tied = tie[1];
@@ -146,6 +155,119 @@
         ^"c*5/8"
     }
 
+    // Answers [peeled token, endpoints].
+    *prSlurCluster { |token, whole, label, markers|
+        var at = this.prSlurMarkerAt(token);
+        var base;
+        if (at.isNil) { ^[token, []] };
+        if (markers.isKindOf(List).not) {
+            this.prRefuseSlurMarker(token, whole, label, markers)
+        };
+        base = if (at > 0) { token.copyRange(0, at - 1) } { "" };
+        if (base.isEmpty) { this.prRefuseLeadingSlurMarker(token, whole, label) };
+        ^[base, this.prSlurEndpoints(token.copyToEnd(at), token, whole, label)]
+    }
+
+    // The first marker parenthesis outside braces, or nil.
+    *prSlurMarkerAt { |token|
+        var braces = 0;
+        token.do { |char, index|
+            case
+            { char == ${ } { braces = braces + 1 }
+            { char == $} } { braces = max(0, braces - 1) }
+            { (braces == 0) and: { (char == $( ) or: { char == $) } } } {
+                ^index }
+        };
+        ^nil
+    }
+
+    // `(` starts and `)` stops, each with an optional id.
+    *prSlurEndpoints { |cluster, token, whole, label|
+        var endpoints = [], at = 0, char, from, id;
+        while { at < cluster.size } {
+            char = cluster[at];
+            if ((char != $( ) and: { char != $) }) {
+                this.prRefuseAfterSlurMarker(cluster.copyToEnd(at), token, whole,
+                    label)
+            };
+            at = at + 1;
+            from = at;
+            while { (at < cluster.size) and: { cluster[at].isDecDigit } } {
+                at = at + 1 };
+            id = this.prSlurId(if (at > from) { cluster.copyRange(from, at - 1) }
+                { "" }, token, whole, label);
+            endpoints = endpoints.add(if (char == $( ) {
+                Spanner.slurStart(id) } { Spanner.slurStop(id) })
+        };
+        ^endpoints
+    }
+
+    // Bounded before conversion, since an Integer past its range wraps.
+    *prSlurId { |digits, token, whole, label|
+        var id;
+        if (digits.isEmpty) { ^1 };
+        if ((digits.size > 10) or: { digits.asFloat > 2147483647 }) {
+            Error(
+                "%: % names slur id %, past the largest Integer."
+                .format(label, this.prLeafAt(token, whole), digits)
+            ).throw
+        };
+        id = digits.asInteger;
+        if (id < 1) {
+            Error(
+                "%: % names slur id %. Slur ids count from 1, e.g. \"c4(2 d4)2\"."
+                .format(label, this.prLeafAt(token, whole), digits)
+            ).throw
+        };
+        ^id
+    }
+
+    *prRefuseAfterSlurMarker { |rest, token, whole, label|
+        if ((rest[0] == $-) and: { rest.size > 1 } and: { rest[1].isDecDigit }) {
+            Error(
+                "%: % names a negative slur id. Slur ids count from 1."
+                .format(label, this.prLeafAt(token, whole))
+            ).throw
+        };
+        Error(
+            "%: % has \"%\" after a slur marker. Only an id or another marker "
+            "may follow."
+            .format(label, this.prLeafAt(token, whole), rest)
+        ).throw
+    }
+
+    // A marker with no leaf before it: spaced off one or written first.
+    *prRefuseLeadingSlurMarker { |token, whole, label|
+        var alone = token.every { |char|
+            (char == $( ) or: { char == $) } or: { char.isDecDigit } };
+        if (alone) {
+            Error(
+                "%: % is a slur marker with no leaf before it. Use \"c4( d4)\"."
+                .format(label, this.prLeafAt(token, whole))
+            ).throw
+        };
+        Error(
+            "%: % writes a slur marker before its leaf. It follows the leaf: \"%\"."
+            .format(label, this.prLeafAt(token, whole),
+                token.drop(1) ++ token.keep(1))
+        ).throw
+    }
+
+    // `reason` names the slot that refuses markers.
+    *prRefuseSlurMarker { |token, whole, label, reason|
+        Error(
+            "%: % carries a slur marker. %".format(label,
+                this.prLeafAt(token, whole), this.prSlurMarkerRefusal(reason))
+        ).throw
+    }
+
+    *prSlurMarkerRefusal { |reason|
+        if (reason == \grace) {
+            ^"A grace note carries no spanner."
+        };
+        ^"This slot reads no slur markers. Attach .slurStart(n) or .slurStop(n)."
+    }
+
 
     // Note [A marking is a suffix on the note]
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -153,7 +275,8 @@
     // `c4:mf:staccato` is a leaf plus point markings. Bare names come
     // from `Marking`.
     //
-    // Text takes braces. Spanners stay object methods.
+    // Text takes braces. Slur markers follow all suffixes. Other
+    // spanners stay object methods.
     //
     // A colon starts suffixes unless the token begins as a tuplet ratio.
 
@@ -171,32 +294,39 @@
 
     // Answers [the token without suffixes, the markings in written order,
     // and [grace leaves, style] or nil].
-    *prLeafSuffixes { |token, whole, label = "Measure.notation", graces = true|
+    // Read suffixes from `token`; quote `written` in refusals.
+    *prLeafSuffixes { |token, whole, label = "Measure.notation", graces = true,
+        written|
         var at, base, markings = [], group;
+        var quoted = written ? token;
 
         // Chords and rests build themselves, so check braces here too.
-        this.prCheckBraces(token, whole, label);
+        this.prCheckBraces(quoted, whole, label);
+        // If a marker reaches suffix parsing, this slot did not opt in.
+        if (this.prSlurMarkerAt(token).notNil) {
+            this.prRefuseSlurMarker(quoted, whole, label)
+        };
         at = this.prOutsideBraces(token, $:);
         if (at.isNil) {
-            this.prRefuseStrayBraces(token, token, whole, label);
+            this.prRefuseStrayBraces(token, quoted, whole, label);
             ^[token, [], nil]
         };
         base = token.copyRange(0, at - 1);
-        if (base.isEmpty) { ^this.prRefuseLeaf(token, whole, label) };
-        this.prRefuseStrayBraces(base, token, whole, label);
+        if (base.isEmpty) { ^this.prRefuseLeaf(quoted, whole, label) };
+        this.prRefuseStrayBraces(base, quoted, whole, label);
         this.prSplitOutsideBraces(token.copyToEnd(at + 1), $:).do { |name|
-            var style = this.prGraceSuffixStyle(name, token, whole, label, graces);
+            var style = this.prGraceSuffixStyle(name, quoted, whole, label, graces);
             if (style.isNil) {
                 markings = markings.add(
-                    this.prMarkingNamed(name, token, whole, label))
+                    this.prMarkingNamed(name, quoted, whole, label))
             } {
                 if (group.notNil) {
                     Error(
                         "%: % writes two grace groups. A leaf has one, so put every grace leaf in one body."
-                        .format(label, this.prLeafAt(token, whole))
+                        .format(label, this.prLeafAt(quoted, whole))
                     ).throw
                 };
-                group = [this.prGraceBody(name, token, whole, label), style]
+                group = [this.prGraceBody(name, quoted, whole, label), style]
             }
         };
         ^[base, markings, group]
@@ -267,7 +397,7 @@
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         };
-        ^this.prNotationLeaves(body, label, false)
+        ^this.prNotationLeaves(body, label, false, "", \grace)
     }
 
     // A parsed group reaches its host through the model's own entry
@@ -281,8 +411,8 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //
     // Pitch-list slots split rhythm from pitch. Tokens may carry
-    // marking suffixes, but no duration, tie, rest, chord, tuplet or
-    // group.
+    // marking suffixes, but no duration, tie, rest, chord, tuplet,
+    // group or slur marker.
 
 
     // Answers `pitch -> markings`, avoiding two-element Array pitch specs.
@@ -343,6 +473,13 @@
         if (this.prIsRatioToken(token)) {
             Error(
                 "%: % is a tuplet ratio. Pitch lists name attacks only. The rhythm list says durations."
+                .format(label, this.prLeafAt(token, whole))
+            ).throw
+        };
+        if (this.prSlurMarkerAt(token).notNil) {
+            Error(
+                "%: % carries a slur marker. Pitch lists cycle, so a repeated "
+                "endpoint says nothing. Use Spanner."
                 .format(label, this.prLeafAt(token, whole))
             ).throw
         }

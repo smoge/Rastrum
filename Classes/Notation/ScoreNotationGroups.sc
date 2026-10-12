@@ -36,8 +36,9 @@
     // joins the attacks inside the tuplet. Rests are refused here,
     // where the written group can be named.
     //
-    // `c4:gliss d4` stays out of this parser. A forward suffix needs
-    // a later pass over the built run.
+    // `c4:gliss d4` stays out of this parser. The suffix would bind
+    // forward to a leaf its token does not name, where a slur marker
+    // names only its own end.
 
     // The written head of a glissando group, or nil. `Spanner` owns the
     // spellings.
@@ -50,10 +51,11 @@
     }
 
     // `gliss[run]`, parsed as a run with glissando pairs between its attacks.
-    *prNotationGlissando { |token, whole, label|
+    *prNotationGlissando { |token, whole, label, markers|
         var at = this.prOutsideBraces(token, $[);
         var written = token.copyRange(0, at - 1);
         var inside, group, leaves;
+        this.prRefuseSlurMarkerAfterBracket(token, whole, label);
         if (token.endsWith("]").not) {
             Error(
                 "%: % has text after its glissando bracket."
@@ -63,7 +65,8 @@
         inside = token.copyRange(at + 1, token.size - 2).stripWhiteSpace;
         // Read first, then refuse rests by name.
         group = if (inside.isEmpty) { [] } {
-            this.prNotationChildren(inside, label, true, "", true, false) };
+            this.prNotationChildren(inside, label, true, "", true, false,
+                markers) };
         leaves = group.inject([], { |all, child|
             all ++ if (child.isKindOf(ScoreLeaf)) { [child] } { child.leaves } });
         leaves.do { |leaf|
@@ -218,9 +221,10 @@
     // `head[run]`, parsed as a run with resolved marks added to every leaf.
     // See Note [A marking group is a repeated suffix].
     *prNotationMarkingGroup { |token, head, whole, label, rests, containers,
-        hairpinGroups|
+        hairpinGroups, markers|
         var at = this.prOutsideBraces(token, $[);
         var inside, children, leaves;
+        this.prRefuseSlurMarkerAfterBracket(token, whole, label);
         if (token.endsWith("]").not) {
             Error(
                 "%: % has text after its marking bracket. Put the length and any "
@@ -236,7 +240,7 @@
             ).throw
         };
         children = this.prNotationChildren(inside, label, rests, "", containers,
-            hairpinGroups);
+            hairpinGroups, markers);
         // Check the same leaves that will receive the mark.
         leaves = children.inject([], { |all, child|
             all ++ if (child.isKindOf(ScoreLeaf)) { [child] } { child.leaves } });
@@ -266,9 +270,10 @@
 
     // `direction[run]`, parsed as a run with hairpin endpoints
     // attached. See Note [A named group is the other bracket].
-    *prNotationHairpin { |token, direction, whole, label, rests|
+    *prNotationHairpin { |token, direction, whole, label, rests, markers|
         var at = this.prOutsideBraces(token, $[);
         var inside, group, written;
+        this.prRefuseSlurMarkerAfterBracket(token, whole, label);
         if (token.endsWith("]").not) {
             Error(
                 "%: % has text after its hairpin bracket. Put ties and markings inside "
@@ -281,7 +286,8 @@
         written = token.copyRange(0, at - 1);
         // Parser callers get wording that quotes the written head.
         group = if (inside.isEmpty) { [] } {
-            this.prNotationChildren(inside, label, rests, "", true, false) };
+            this.prNotationChildren(inside, label, rests, "", true, false,
+                markers) };
         if (group.size < 2) {
             Error(
                 "%: % needs at least two leaves, got %. Use \"%[c4 d4]\"."
@@ -330,9 +336,11 @@
     }
 
     // `actual:normal[run]`: counts for `Tuplet.ratio`, body parsed here.
-    *prNotationTuplet { |token, whole, label, rests, hairpinGroups = true|
+    *prNotationTuplet { |token, whole, label, rests, hairpinGroups = true,
+        markers|
         var at = token.find("[");
         var counts = token.copyRange(0, at - 1);
+        this.prRefuseSlurMarkerAfterBracket(token, whole, label);
         if (token.endsWith("]").not) {
             Error(
                 "%: % has text after its tuplet bracket. Put ties and markings inside "
@@ -348,6 +356,19 @@
         };
         ^Tuplet.ratio(counts, this.prNotationChildren(
             token.copyRange(at + 1, token.size - 2), label, rests, "", true,
-            hairpinGroups))
+            hairpinGroups, markers))
+    }
+
+    // Name marker-on-container before the general bracket-tail refusal.
+    *prRefuseSlurMarkerAfterBracket { |token, whole, label|
+        var close = this.prLastOutsideBraces(token, $]);
+        var next = close !? { token[close + 1] };
+        if ((next == $( ) or: { next == $) }) {
+            Error(
+                "%: % puts a slur marker after a bracket. Markers attach to "
+                "leaves, so write it on one inside, e.g. \"3:2[c8( d8 e8]\"."
+                .format(label, this.prLeafAt(token, whole))
+            ).throw
+        }
     }
 }

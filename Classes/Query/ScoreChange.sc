@@ -66,11 +66,29 @@ ScoreChange {
 
     // >>> ScoreChange.between(
     //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
+    //     MusicScore.oneStaff(Measure("2/4", "c4 e4"))).deltasOutside([[0, 0]])
+    //     .isEmpty
+    // true
+    //
+    // ^ [IdentityDictionary]
+    deltasOutside { |addresses| ^ScoreDiff.deltasOutside(deltas, addresses) }
+
+    // >>> ScoreChange.between(
+    //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
     //     MusicScore.oneStaff(Measure("2/4", "c4 e4"))).countByKind[\pitchChanged]
     // 1
     //
     // ^ Dictionary
     countByKind { ^ScoreDiff.countByKind(deltas) }
+
+    // >>> ScoreChange.between(
+    //     MusicScore.oneStaff(Measure("2/4", "c4 d4")),
+    //     MusicScore.oneStaff(Measure("2/4", "c4 e4")))
+    //     .unexpectedKinds([\pitchChanged]).isEmpty
+    // true
+    //
+    // ^ [Symbol]
+    unexpectedKinds { |allowed| ^ScoreDiff.unexpectedKinds(deltas, allowed) }
 
     // The stored scores supply `ScoreDiff`'s second argument.
     //

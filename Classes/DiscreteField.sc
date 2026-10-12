@@ -23,28 +23,26 @@ DiscreteField {
     // ^ [Rational]
     *membersBetween { |low, high, step = 1, predicate|
         var label = "DiscreteField.membersBetween";
-        var first = this.prCheckedExact(low, "low", label);
-        var last = this.prCheckedExact(high, "high", label);
-        var by = this.prCheckedExact(step, "step", label);
+        var first = this.prCheckedExact(low,  "low", label);
+        var last  = this.prCheckedExact(high, "high", label);
+        var by    = this.prCheckedExact(step, "step", label);
         var found = List.new, number = first;
 
         if (by <= 0) {
-            Error("%: step % is not positive.".format(label, this.prText(by)))
-                .throw
+            Error("%: step % is not positive.".format(label, this.prText(by))).throw
         };
         if (last < first) {
-            Error("%: high % is below low %.".format(label, this.prText(last),
-                this.prText(first))).throw
+            Error("%: high % is below low %.".format(label, this.prText(last), this.prText(first))).throw
         };
         if (predicate.notNil and: { predicate.isKindOf(Function).not }) {
-            Error("%: expected a Function or nil, got %.".format(label,
-                predicate.asCompileString)).throw
+            Error("%: expected a Function or nil, got %.".format(label, predicate.asCompileString)).throw
         };
 
         while { number <= last } {
             if (this.prAdmits(predicate, number, label)) { found.add(number) };
             number = number + by
         };
+
         ^found.asArray
     }
 
@@ -56,8 +54,7 @@ DiscreteField {
         };
         if (value.isKindOf(Integer)) { ^Rational(value, 1) };
         if (value.isKindOf(Rational)) { ^value };
-        Error("%: % is %, not an Integer or a Rational.".format(label, what,
-            value.asCompileString)).throw
+        Error("%: % is %, not an Integer or a Rational.".format(label, what, value.asCompileString)).throw
     }
 
     // Refuse a predicate result that `if` cannot read.
