@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.4
+
+- `ScoreDiff.deltasOutside` and `unexpectedKinds`, also on `ScoreChange`:
+  check whether an edit stayed within intended addresses and change kinds.
+- Composition loop support: generated scores can keep a recipe record beside
+  them while using ordinary inspection, `ScoreHistory`, `PlaybackProfile`,
+  LilyPond, MusicXML and ScoreJSON paths.
+- Written slur markers: compact notation reads and prints `c4( d4)`, with ids
+  for overlaps such as `c4(1 d4(2 e4)1 f4)2`. Slurs across barlines still use
+  `Spanner.slur(...)` object syntax.
+
 ## 0.1.3
 
 - Phrase fills: `ScoreEdit.fillPhrase` spreads one rhythm cell across
